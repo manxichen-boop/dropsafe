@@ -8,7 +8,7 @@ import { SystemProgram } from "@solana/web3.js";
 import { solToLamports } from "@/lib/campaign";
 import { translateError, type FriendlyError } from "@/lib/errors";
 import { campaignPda, escrowPda, useDropsafe } from "@/lib/program";
-import { ErrorNotice } from "@/components/Notice";
+import { ErrorNotice, WalletHint } from "@/components/Notice";
 import { WalletButton } from "@/components/WalletButton";
 
 const MAX_U32 = 4_294_967_295;
@@ -17,6 +17,19 @@ const PRESETS = [
   { label: "1 hour", seconds: 3600 },
   { label: "1 day", seconds: 86400 },
   { label: "1 week", seconds: 604800 },
+];
+
+const SHIPPING_OPTIONS = [
+  { label: "2 minutes (demo)", seconds: 120 },
+  { label: "1 day", seconds: 86400 },
+  { label: "7 days", seconds: 604800 },
+  { label: "30 days", seconds: 2592000 },
+];
+const DISPUTE_OPTIONS = [
+  { label: "2 minutes (demo)", seconds: 120 },
+  { label: "1 day", seconds: 86400 },
+  { label: "3 days", seconds: 259200 },
+  { label: "7 days", seconds: 604800 },
 ];
 
 // 转成 datetime-local 输入框要求的本地时间格式
@@ -38,6 +51,8 @@ export default function CreatePage() {
   const [price, setPrice] = useState("0.1");
   const [target, setTarget] = useState("3");
   const [deadline, setDeadline] = useState("");
+  const [shippingSeconds, setShippingSeconds] = useState(604800);
+  const [disputeSeconds, setDisputeSeconds] = useState(259200);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<FriendlyError | null>(null);
 
@@ -69,13 +84,16 @@ export default function CreatePage() {
       // 用当前时间戳(毫秒)作为活动编号,同一团长基本不会重复
       const campaignId = new BN(Date.now());
       const campaign = campaignPda(publicKey, campaignId);
+      const deadlineSeconds = Math.floor(new Date(deadline).getTime() / 1000);
       const signature = await program.methods
         .createCampaign(
           campaignId,
           title.trim(),
           solToLamports(price)!,
           Number(target),
-          new BN(Math.floor(new Date(deadline).getTime() / 1000))
+          new BN(deadlineSeconds),
+          new BN(deadlineSeconds + shippingSeconds),
+          new BN(deadlineSeconds + shippingSeconds + disputeSeconds)
         )
         .accountsPartial({
           organizer: publicKey,
@@ -95,7 +113,10 @@ export default function CreatePage() {
   return (
     <div className="mx-auto max-w-lg">
       <h1 className="text-3xl font-semibold tracking-tight">Create a campaign</h1>
-      <p className="mt-2 text-muted">Buyers pay into an escrow. You can only withdraw once the target is reached.</p>
+      <p className="mt-2 text-muted">
+        Buyers pay into an escrow. Once the target is reached, you can withdraw 70% to place the order. The last 30% stays
+        in escrow until buyers confirm delivery or the dispute window closes.
+      </p>
 
       <form onSubmit={submit} className="mt-8 space-y-5">
         <label className="block">
@@ -140,6 +161,39 @@ export default function CreatePage() {
           </div>
         </div>
 
+        <div className="grid grid-cols-2 gap-4">
+          <label className="block">
+            <span className="text-sm font-medium">Ship within</span>
+            <select
+              className={inputClass}
+              value={shippingSeconds}
+              onChange={(e) => setShippingSeconds(Number(e.target.value))}
+            >
+              {SHIPPING_OPTIONS.map((option) => (
+                <option key={option.seconds} value={option.seconds}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <span className="mt-1 block text-xs text-muted">Counted from the deadline</span>
+          </label>
+          <label className="block">
+            <span className="text-sm font-medium">Dispute window</span>
+            <select
+              className={inputClass}
+              value={disputeSeconds}
+              onChange={(e) => setDisputeSeconds(Number(e.target.value))}
+            >
+              {DISPUTE_OPTIONS.map((option) => (
+                <option key={option.seconds} value={option.seconds}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <span className="mt-1 block text-xs text-muted">Buyers can report non-delivery</span>
+          </label>
+        </div>
+
         {error && <ErrorNotice error={error} />}
 
         {publicKey ? (
@@ -156,6 +210,7 @@ export default function CreatePage() {
             <WalletButton />
           </div>
         )}
+        {submitting && <WalletHint />}
       </form>
     </div>
   );

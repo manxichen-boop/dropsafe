@@ -6,7 +6,7 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-dropsafe = "6KcTuoAX6u5SRdX563VhbrXWiBrMwAfGxST5ud9RaQgX"
+dropsafe = "6Sno3DHv8uPp9aER9hhdToEnKFLHZwzJZjMNX5GnDj8u"
 
 [programs.localnet]
 dropsafe = "6Sno3DHv8uPp9aER9hhdToEnKFLHZwzJZjMNX5GnDj8u"

@@ -1,7 +1,7 @@
 import { PublicKey } from "@solana/web3.js";
 
 // 所有链上配置都集中在这里。
-export const PROGRAM_ID = new PublicKey("6KcTuoAX6u5SRdX563VhbrXWiBrMwAfGxST5ud9RaQgX");
+export const PROGRAM_ID = new PublicKey("6Sno3DHv8uPp9aER9hhdToEnKFLHZwzJZjMNX5GnDj8u");
 
 // 默认连 Devnet。本地调试时可用 NEXT_PUBLIC_RPC_URL=http://127.0.0.1:8899 覆盖。
 export const RPC_URL = process.env.NEXT_PUBLIC_RPC_URL ?? "https://api.devnet.solana.com";

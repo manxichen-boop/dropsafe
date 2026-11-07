@@ -19,7 +19,8 @@ body {
   font-family: var(--font-sans);
 }
 
-input {
+input,
+select {
   color-scheme: dark;
 }
 

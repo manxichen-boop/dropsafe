@@ -4,46 +4,52 @@
 
 ## 录制前准备(提前 15 分钟)
 
-- Phantom 打开 Testnet Mode,选 Solana Devnet。准备 2 个账户(Account 1 当团长,Account 2 当买家),各有至少 1 SOL。可在 https://faucet.solana.com 领取。
-- 录制用线上地址 https://dropsafe-three.vercel.app 。首次打开时需要在 Phantom 里批准连接这个网站。
-- **提前创建一个"失败活动"**:目标 3 人、截止时间约 5 分钟、用 Account 2 参与一次。这样录制到退款环节时它刚好已过期,不用现场等。
-- 把"达标提取"所需的活动在录制中现场创建(目标 1 人,截止时间选 1 hour)。
-- 钱包弹窗出现后要在 30 秒内确认。拖太久交易会过期,页面会提示重试。
+- Phantom 打开 Testnet Mode,选 Solana Devnet。准备 3 个账户(A 团长,B、C 买家),各有至少 1 SOL。可在 https://faucet.solana.com 领取。
+- 录制用线上地址。首次打开时需要在 Phantom 里批准连接这个网站。
+- 钱包弹窗出现后要在 30 秒内确认。拖太久交易会过期,页面会提示重试。如果弹窗没出现,点工具栏的 Phantom 图标,或者刷新页面重试。
+- **提前准备一个“失败活动”**:目标 3 人、截止时间约 5 分钟、用 B 参与一次。
+- **提前准备一个“申诉活动”**:目标 1 人,截止时间 2 min,Ship within 和 Dispute window 都选 2 minutes (demo)。用 B 参与,用 A 提取 70%。大约 3–4 分钟后,它会进入 Dispute window,然后马上开录这一段,这个窗口只有 2 分钟。
 - 打开 Explorer 标签页备用。Devnet 偶尔会慢,交易确认时可以剪掉等待。
 
 ## 脚本
 
-### 0:00–0:20 痛点(停在首页)
+### 0:00–0:15 痛点(停在首页)
 
-> "Every day, fans organize group buys for K-pop albums and limited drops. Buyers send money straight to the organizer's wallet and just hope. If the organizer runs off, the money is gone. DropSafe fixes that with an on-chain escrow on Solana."
+> "Fans organize group buys for K-pop albums and limited drops every day. Buyers send money straight to the organizer's wallet and hope. DropSafe puts that money in an on-chain escrow on Solana instead."
 
-### 0:20–0:40 创建活动(Account 1,团长)
+### 0:15–0:30 创建活动(账户 A,团长)
 
-点 **Create campaign**,填 `K-pop album group order`、`0.1` SOL、目标 `1`,选 **1 hour**,在 Phantom 确认。
+点 **Create campaign**,填 `K-pop album group order`、`0.1` SOL、目标 `2`,截止时间选 **1 hour**,在 Phantom 确认。
 
-> "An organizer sets a price, a target and a deadline. This creates a campaign and an escrow account owned by our program. It has no private key, so not even the organizer can take money out directly."
+> "An organizer sets a price, a target and deadlines. This creates an escrow account owned by our program. It has no private key, so not even the organizer can take money out directly."
 
-### 0:40–1:05 买家参与(切到 Account 2)
+### 0:30–0:50 买家参与(切到 B,再切到 C)
 
-点 **Join for 0.1 SOL**,确认。指一下进度条和 **In escrow**,点 Escrow account 链接到 Explorer 展示余额。
+各点一次 **Join for 0.1 SOL**。指一下进度条和 **In escrow**,点 Escrow account 链接到 Explorer 展示余额。
 
-> "A buyer joins, and the SOL goes into escrow, not to the organizer. You can verify it on Solana Explorer. Each wallet can only join once, because the program creates one contribution record per buyer."
+> "Buyers join, and the SOL goes into escrow, not to the organizer. Anyone can verify that on Solana Explorer."
 
-### 1:05–1:25 达标提取(切回 Account 1)
+### 0:50–1:10 分阶段放款(切回 A,提取后切到 B)
 
-点 **Withdraw 0.1 SOL**,确认。状态变成 Released。
+A 点 **Withdraw 70%**。切到 B,点 **I received my goods**。
 
-> "The target is reached, so now, and only now, the organizer can withdraw. Nobody else can call this, and it can't be done twice."
+> "The target is reached, but the organizer only gets 70% to place the order. The last 30% stays locked. When a buyer has their goods, they confirm, and only then does their share go to the organizer."
 
-### 1:25–1:50 失败退款(切到 Account 2,打开提前准备的失败活动)
+### 1:10–1:30 未收到货(B,打开提前准备的申诉活动)
 
-点 **Get my 0.1 SOL back**,确认,展示 Explorer 链接。
+点 **I didn't receive my goods**,确认,展示 Explorer 链接。
 
-> "Here's the case that matters most. This campaign missed its target by the deadline. The buyer takes their money back themselves. No customer service, no asking the organizer. The program enforces it."
+> "If the shipping deadline passes and the goods never came, the buyer reports it and takes their 30% back. If nobody complains by the end of the dispute window, the organizer can claim the rest."
 
-### 1:50–2:00 收尾
+### 1:30–1:45 没达标(B,打开提前准备的失败活动)
 
-> "To be clear about what this protects: if a group buy doesn't fill, nobody loses money. It doesn't yet stop an organizer who collects the funds and never ships, so that's what we're building next, with staged payouts and delivery confirmation. DropSafe: no target, no payout. Live on Solana Devnet. Thanks!"
+点 **Get my 0.1 SOL back**,确认。
+
+> "And if the group buy never fills, every buyer takes their money back themselves. No customer service, no asking the organizer."
+
+### 1:45–2:00 收尾
+
+> "To be clear about the limits: an organizer who runs off after withdrawing still keeps the 70%, so we cap the damage rather than remove it. Next up are organizer deposits and dispute handling. DropSafe: no target, no payout. Live on Solana Devnet. Thanks!"
 
 ## 评委可能问的问题
 
@@ -51,6 +57,12 @@
 
 **怎么防止重复参与和重复退款?** Contribution PDA 只能 `init` 一次,所以不能重复参与。退款时关闭这个账户,所以不能重复退款。
 
-**团长达标后拿钱跑路怎么办?** 这是当前版本的局限,也是最诚实的回答:现在只保护"凑不齐"的情况。下一步是买家确认收货后才放款,以及团长保证金。
+**团长达标后拿钱跑路怎么办?** 他最多卷走 70%,剩下 30% 买家可以在发货期限后取回。这是限制损失,不是彻底解决,下一步是团长保证金。
 
-**团长能用小号凑人数吗?** 能,所以需要上面的确认收货和保证金机制来配合。
+**买家收到货还谎称没收到怎么办?** 他能拿回 30%,目前没有仲裁,这是当前版本的局限。
+
+**团长能用小号凑人数吗?** 能。保证金机制可以提高这样做的成本。
+
+**为什么不是到期自动放款?** Solana 程序不能定时运行,所以申诉期结束后,要由团长发一笔交易来领取。
+
+**团长一直不提取,钱会卡死吗?** 不会。过了发货期限,团长就不能再提取,买家可以全额取回。

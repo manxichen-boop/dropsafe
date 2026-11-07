@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import type { PublicKey } from "@solana/web3.js";
-import { displayStatus, formatCountdown, formatSol, type Campaign } from "@/lib/campaign";
+import { displayStatus, formatCountdown, formatSol, nextDeadline, type Campaign } from "@/lib/campaign";
 import { useDropsafe } from "@/lib/program";
 import { ProgressBar } from "@/components/ProgressBar";
 import { StatusBadge, STATUS_TONE } from "@/components/StatusBadge";
@@ -42,12 +42,16 @@ export default function HomePage() {
         </h1>
         <p className="mt-4 text-lg text-muted">
           Your SOL waits in an on-chain escrow, not in someone&apos;s wallet. Miss the target and every buyer takes their
-          money back. Hit it, and only then can the organizer withdraw.
+          money back. Hit it, and the organizer gets 70% to place the order. The last 30% stays in escrow until buyers
+          confirm delivery or the dispute window closes.
         </p>
       </section>
 
       <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-lg font-medium">Campaigns</h2>
+        <div>
+          <h2 className="text-lg font-medium">Campaigns</h2>
+          <p className="text-sm text-muted">Demo on Solana Devnet. Sample campaigns use test SOL, not real orders.</p>
+        </div>
         <Link href="/create" className="rounded-lg border border-line px-3 py-1.5 text-sm transition-colors hover:border-mint hover:text-mint">
           + New campaign
         </Link>
@@ -74,6 +78,7 @@ export default function HomePage() {
       <div className="grid gap-4 sm:grid-cols-2">
         {rows?.map(({ publicKey, account }) => {
           const status = displayStatus(account, now);
+          const next = nextDeadline(account, status);
           return (
             <Link
               key={publicKey.toBase58()}
@@ -92,7 +97,7 @@ export default function HomePage() {
                 <span>
                   {account.contributorCount} / {account.targetCount} joined
                 </span>
-                <span>{status === "released" ? "Completed" : formatCountdown(account.deadlineUnixTs.toNumber() - now)}</span>
+                <span>{next === null ? "Ended" : formatCountdown(next - now)}</span>
               </div>
             </Link>
           );

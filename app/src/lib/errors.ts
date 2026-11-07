@@ -21,6 +21,14 @@ const PROGRAM_ERRORS: Record<string, FriendlyError> = {
   TargetNotReached: { zh: "活动还没达标,团长不能提取。", en: "The target has not been reached, so funds cannot be withdrawn." },
   AlreadyReleased: { zh: "资金已经提取过了。", en: "The funds have already been withdrawn." },
   MathOverflow: { zh: "金额计算溢出。", en: "The amount calculation overflowed." },
+  InvalidDeliveryDeadline: { zh: "发货期限必须晚于募集截止时间。", en: "The shipping deadline must be after the campaign deadline." },
+  InvalidDisputeDeadline: { zh: "申诉截止时间必须晚于发货期限。", en: "The dispute deadline must be after the shipping deadline." },
+  DeliveryDeadlinePassed: { zh: "发货期限已过,团长不能再提取。", en: "The shipping deadline has passed, so the organizer can no longer withdraw." },
+  NotDelivering: { zh: "团长还没有提取首款,现在不能确认收货。", en: "The organizer has not withdrawn yet, so there is no delivery to confirm." },
+  DeliveryDeadlineNotReached: { zh: "还没到发货期限,暂时不能报告未收到。", en: "You can report non-delivery only after the shipping deadline." },
+  DisputeWindowClosed: { zh: "申诉期已结束。", en: "The dispute window has closed." },
+  DisputeWindowOpen: { zh: "申诉期还没结束,团长暂时不能领取尾款。", en: "The organizer can claim the remaining funds only after the dispute window closes." },
+  WrongBuyer: { zh: "这份参与记录不属于这位买家。", en: "This contribution does not belong to this buyer." },
   // Anchor 框架错误:参与凭证不存在,说明没参与过或已退款
   AccountNotInitialized: {
     zh: "没有找到你的参与记录:你可能没参与过,或者已经退款了。",

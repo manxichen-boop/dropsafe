@@ -4,7 +4,7 @@
 
 **Live demo (Solana Devnet):** https://dropsafe-three.vercel.app
 
-Devnet program: [`6KcTuoAX6u5SRdX563VhbrXWiBrMwAfGxST5ud9RaQgX`](https://explorer.solana.com/address/6KcTuoAX6u5SRdX563VhbrXWiBrMwAfGxST5ud9RaQgX?cluster=devnet)
+Devnet program: [`6Sno3DHv8uPp9aER9hhdToEnKFLHZwzJZjMNX5GnDj8u`](https://explorer.solana.com/address/6Sno3DHv8uPp9aER9hhdToEnKFLHZwzJZjMNX5GnDj8u?cluster=devnet)
 
 ## The problem
 
@@ -16,7 +16,11 @@ DropSafe puts the money somewhere the organizer can't touch until the deal is on
 
 - Buyers pay into an **escrow account controlled by the program**. It has no private key, so nobody can move the funds outside the rules.
 - **Target missed by the deadline:** every buyer takes their own SOL back, without asking anyone.
-- **Target reached:** only then can the organizer withdraw.
+- **Target reached:** the organizer can withdraw **70%** to place the order. The other **30%** stays in escrow.
+- **Goods arrive:** a buyer confirms delivery, and their 30% goes to the organizer.
+- **Goods don't arrive:** after the shipping deadline, a buyer can report it during the dispute window and take their 30% back.
+- **No complaint:** after the dispute window closes, the organizer can claim the shares nobody disputed.
+- **Organizer never withdraws:** after the shipping deadline, every buyer can take back their full payment, so funds never get stuck.
 
 ## Architecture
 
@@ -24,9 +28,11 @@ DropSafe puts the money somewhere the organizer can't touch until the deal is on
 flowchart LR
     B[Buyers] -- "contribute: price per person" --> E[(Escrow PDA)]
     O[Organizer] -- create_campaign --> C[Campaign PDA]
-    C -. owns rules for .-> E
-    E -- "refund: target missed, after deadline" --> B
-    E -- "release: target reached" --> O
+    C -. sets the rules for .-> E
+    E -- "refund: target missed" --> B
+    E -- "claim_undelivered: 30%, or 100% if never withdrawn" --> B
+    E -- "release: 70% once target reached" --> O
+    E -- "confirm_delivery or claim_unconfirmed: 30%" --> O
     B -- "one per buyer" --> P[Contribution PDA]
     W[Next.js app + Phantom] -- signed transactions --> S[DropSafe program on Devnet]
     S --> C
@@ -38,7 +44,7 @@ flowchart LR
 | --- | --- | --- |
 | Campaign | `"campaign", organizer, campaign_id (u64 LE)` | Title, price, target, deadline, count, status |
 | Escrow | `"escrow", campaign` | Holds the buyers' SOL |
-| Contribution | `"contribution", campaign, buyer` | Proves a buyer joined and how much they can reclaim. Created once, so nobody can join twice. Closed on refund, so nobody can refund twice |
+| Contribution | `"contribution", campaign, buyer` | Proves a buyer joined and how much they can reclaim. Created once, so nobody can join twice. Closed when settled, so nobody can be paid twice |
 
 ## State machine
 
@@ -46,24 +52,29 @@ flowchart LR
 stateDiagram-v2
     [*] --> Fundraising: create_campaign
     Fundraising --> Fundraising: contribute
-    Fundraising --> Released: release (count >= target)
     Fundraising --> Failed: first refund (deadline passed, count < target)
     Failed --> Failed: later refunds
-    Released --> [*]
+    Fundraising --> Delivering: release 70% (count >= target, before shipping deadline)
+    Delivering --> Delivering: a buyer's 30% is settled
+    Delivering --> Completed: every buyer's 30% is settled
+    Completed --> [*]
 ```
 
-The chain only writes `Failed` on the first refund. The app also shows a campaign as failed as soon as the deadline passes with too few buyers, and as "Target reached" while it waits for the organizer to withdraw.
+The chain only writes `Failed` on the first refund. The app works out what a campaign is really doing from the clock too, such as showing it as failed as soon as the deadline passes with too few buyers. If an organizer never withdraws, buyers refund in full and the campaign stays in `Fundraising` on-chain, while the app shows "Not withdrawn · refunds open".
 
 ## Instructions
 
 | Instruction | Who | Rules |
 | --- | --- | --- |
-| `create_campaign` | Organizer | Title ≤ 50 characters, price > 0, target > 0, deadline in the future |
+| `create_campaign` | Organizer | Title ≤ 50 characters, price > 0, target > 0, deadline in the future, then shipping deadline, then dispute deadline |
 | `contribute` | Buyer | Fundraising, before the deadline, not full, once per wallet |
 | `refund` | Buyer | Deadline passed and target missed |
-| `release` | Organizer | Target reached, not released yet |
+| `release` | Organizer | Target reached, not released yet, before the shipping deadline. Pays 70% |
+| `confirm_delivery` | Buyer | After release. Pays that buyer's 30% to the organizer |
+| `claim_undelivered` | Buyer | After the shipping deadline. Returns 30% during the dispute window, or the full payment if the organizer never withdrew |
+| `claim_unconfirmed` | Organizer | After the dispute window. Pays the organizer one undisputed 30% share |
 
-Custom errors include `DeadlinePassed`, `CampaignFull`, `NotOrganizer`, `TargetNotReached`, `AlreadyReleased` and `CampaignStillActive`. The app translates them into plain Chinese and English.
+Solana programs can't run on a timer, so "released automatically after the dispute window" means the organizer sends a transaction to claim it. The app translates custom errors into plain Chinese and English.
 
 ## Run it
 
@@ -87,7 +98,7 @@ npm install
 npm test
 ```
 
-This runs 17 tests on a local validator. `npm test` runs `anchor test --validator legacy`, because Anchor 1.x otherwise expects Surfpool.
+This runs 27 tests on a local validator. `npm test` runs `anchor test --validator legacy`, because Anchor 1.x otherwise expects Surfpool.
 
 ### Configuration
 
@@ -95,15 +106,21 @@ The program ID and RPC URL live in [`app/src/lib/config.ts`](app/src/lib/config.
 
 ## Known limits
 
-This is a hackathon prototype on Devnet and has not been audited. Reaching the target releases the money before any goods are delivered, and an organizer could fill their own campaign using several wallets. Escrow protects buyers from a campaign that never fills, but not yet from an organizer who collects the funds and never ships. The first two Future Work items address this.
+This is a hackathon prototype on Devnet and has not been audited. Staged payouts cap the damage rather than remove it:
 
-About 0.001 SOL of rent paid by the organizer stays in each escrow account after release, so that a repeated release fails with a clear `AlreadyReleased` error.
+- An organizer who runs off after withdrawing still keeps the 70%. Buyers can only recover the 30%.
+- A dishonest buyer can report non-delivery after receiving their goods and keep the 30%. There is no arbitration yet.
+- An organizer can fill their own campaign using several wallets.
+
+About 0.001 SOL of rent paid by the organizer stays in each escrow account.
+
+## Versions
+
+The tag `v1-submission` is the earlier version, without staged payouts. Its program is still on Devnet at `6KcTuoAX6u5SRdX563VhbrXWiBrMwAfGxST5ud9RaQgX`.
 
 ## Future Work
 
-- Buyer confirmation of delivery before funds are released
-- Staged payouts to the organizer
-- Dispute handling
+- Dispute handling and arbitration
 - Organizer deposits
 - USDC and other SPL tokens
 
