@@ -18,7 +18,7 @@ const en = {
   home: {
     title: "Group buys with the money held on-chain until it's earned.",
     subtitle:
-      "Your SOL goes into an escrow account with no private key. If the group doesn't fill by the deadline, every buyer takes their full share back. If it fills, the organizer receives 70% to place the order, and the last 30% waits until buyers confirm delivery.",
+      "Your SOL goes into an escrow account with no private key. If the group doesn't fill by the deadline, every buyer takes their full share back. If it fills, the organizer receives 70% to place the order, and the last 30% stays in escrow until buyers confirm delivery or the dispute window closes.",
     mascotAlt: "Lockie, a round orange coin jar, hugging a coin",
     storyTitle: "How your coins travel",
     story1: "Buyers drop their SOL into Lockie",
@@ -199,7 +199,7 @@ const zh: Messages = {
   },
   home: {
     title: "团购的钱留在链上,赚到了才放出。",
-    subtitle: "你的 SOL 存进一个没有私钥的托管账户。截止时没凑满,每位买家都能全额取回。凑满后,团长收到 70% 去下单,剩下 30% 等买家确认收货。",
+    subtitle: "你的 SOL 存进一个没有私钥的托管账户。截止时没凑满,每位买家都能全额取回。凑满后,团长收到 70% 去下单,剩下 30% 留在托管里,直到买家确认收货或申诉期结束。",
     mascotAlt: "Lockie,一个圆滚滚的橙色存钱罐,抱着一枚硬币",
     storyTitle: "你的硬币怎么走",
     story1: "买家把 SOL 投进 Lockie",
