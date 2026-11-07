@@ -33,6 +33,9 @@ describe("dropsafe v2", () => {
   const contributionOf = (c: Pk, b: Pk) => pda(Buffer.from("contribution"), c.toBuffer(), b.toBuffer());
   const organizerStatsOf = (o: Pk) => pda(Buffer.from("organizer"), o.toBuffer());
   const buyerStatsOf = (b: Pk) => pda(Buffer.from("buyer"), b.toBuffer());
+  const campaignExtOf = (c: Pk) => pda(Buffer.from("campaign_ext"), c.toBuffer());
+  const shipmentOf = (c: Pk, b: Pk) => pda(Buffer.from("shipment"), contributionOf(c, b).toBuffer());
+  const organizerExtOf = (o: Pk) => pda(Buffer.from("organizer_stats_ext"), o.toBuffer());
 
   const chainNow = async () => {
     const info = await connection.getAccountInfo(SYSVAR_CLOCK_PUBKEY, "confirmed");
@@ -75,6 +78,7 @@ describe("dropsafe v2", () => {
     imageUrl?: string;
     deadline?: number;
     delivery?: number;
+    maxTransit?: number;
   }
 
   const create = async (o: CreateOpts) => {
@@ -93,13 +97,16 @@ describe("dropsafe v2", () => {
         o.target ?? 2,
         new BN(deadline),
         new BN(delivery),
-        tierArg(o.tier ?? "standard")
+        tierArg(o.tier ?? "standard"),
+        new BN(o.maxTransit ?? 30 * DAY)
       )
       .accountsPartial({
         organizer: o.organizer.publicKey,
         campaign,
         escrow: escrowOf(campaign),
         organizerStats: organizerStatsOf(o.organizer.publicKey),
+        campaignExt: campaignExtOf(campaign),
+        organizerStatsExt: organizerExtOf(o.organizer.publicKey),
         systemProgram: SystemProgram.programId,
       })
       .signers([o.organizer])
@@ -180,16 +187,67 @@ describe("dropsafe v2", () => {
   const confirm = (c: Pk, buyer: Signer, contributionBuyer: Pk = buyer.publicKey) =>
     program.methods
       .confirmDelivery()
-      .accountsPartial({ buyer: buyer.publicKey, campaign: c, contribution: contributionOf(c, contributionBuyer) })
+      .accountsPartial({
+        buyer: buyer.publicKey,
+        campaign: c,
+        campaignExt: campaignExtOf(c),
+        contribution: contributionOf(c, contributionBuyer),
+        shipment: shipmentOf(c, contributionBuyer),
+      })
       .signers([buyer])
       .rpc();
 
-  const report = (c: Pk, buyer: Signer, contributionBuyer: Pk = buyer.publicKey) =>
+  const reportAccounts = async (c: Pk, buyer: Signer, contributionBuyer: Pk) => ({
+    buyer: buyer.publicKey,
+    campaign: c,
+    campaignExt: campaignExtOf(c),
+    contribution: contributionOf(c, contributionBuyer),
+    shipment: shipmentOf(c, contributionBuyer),
+    organizerStatsExt: organizerExtOf(await organizerOf(c)),
+    systemProgram: SystemProgram.programId,
+  });
+  // 没有发货声明的名额:报告未按期发货(v2.1 的测试场景都没有发货声明,所以走这条)
+  const report = async (c: Pk, buyer: Signer, contributionBuyer: Pk = buyer.publicKey) =>
     program.methods
-      .reportNotReceived()
-      .accountsPartial({ buyer: buyer.publicKey, campaign: c, contribution: contributionOf(c, contributionBuyer) })
+      .reportUnshipped()
+      .accountsPartial(await reportAccounts(c, buyer, contributionBuyer))
       .signers([buyer])
       .rpc();
+  // 有发货声明的名额:ETA 之后报告未收到
+  const reportNotReceived = async (c: Pk, buyer: Signer, contributionBuyer: Pk = buyer.publicKey) =>
+    program.methods
+      .reportNotReceived()
+      .accountsPartial(await reportAccounts(c, buyer, contributionBuyer))
+      .signers([buyer])
+      .rpc();
+
+  const extend = (c: Pk, buyer: Signer) =>
+    program.methods
+      .extendWaiting()
+      .accountsPartial({
+        buyer: buyer.publicKey,
+        campaign: c,
+        campaignExt: campaignExtOf(c),
+        contribution: contributionOf(c, buyer.publicKey),
+        shipment: shipmentOf(c, buyer.publicKey),
+        systemProgram: SystemProgram.programId,
+      })
+      .signers([buyer])
+      .rpc();
+
+  type ShipSeat = { buyer: Pk; eta: number; campaign?: Pk; shipment?: Pk };
+  const shipmentIx = (c: Pk, caller: Signer, seats: ShipSeat[]) =>
+    program.methods
+      .recordShipmentBatch(seats.map((s) => ({ eta: new BN(s.eta), referenceHash: Array.from(Buffer.alloc(32, s.eta % 251)) })))
+      .accountsPartial({ organizer: caller.publicKey, campaign: c, campaignExt: campaignExtOf(c), systemProgram: SystemProgram.programId })
+      .remainingAccounts(
+        seats.flatMap((s) => [
+          { pubkey: contributionOf(s.campaign ?? c, s.buyer), isSigner: false, isWritable: false },
+          { pubkey: s.shipment ?? shipmentOf(s.campaign ?? c, s.buyer), isSigner: false, isWritable: true },
+        ])
+      )
+      .signers([caller]);
+  const ship = (c: Pk, caller: Signer, seats: ShipSeat[]) => shipmentIx(c, caller, seats).rpc();
 
   const settle = async (c: Pk, buyer: Pk, caller: Signer, organizerAddr?: Pk, buyerAddr?: Pk) => {
     const organizer = await organizerOf(c);
@@ -204,6 +262,10 @@ describe("dropsafe v2", () => {
         contribution: contributionOf(c, buyer),
         organizerStats: organizerStatsOf(organizer),
         buyerStats: buyerStatsOf(buyer),
+        campaignExt: campaignExtOf(c),
+        shipment: shipmentOf(c, buyer),
+        organizerStatsExt: organizerExtOf(organizer),
+        systemProgram: SystemProgram.programId,
       })
       .signers([caller])
       .rpc();
@@ -235,9 +297,13 @@ describe("dropsafe v2", () => {
 
   // 团长净额:现在的余额减起始余额,把活动账户、金库、团长记录的租金加回来。
   // 提交交易的手续费由 provider 钱包支付,不影响这里的计算
-  const organizerNet = async (o: Signer, campaigns: Pk[]) => {
-    let rent = await rentOf(organizerStatsOf(o.publicKey));
-    for (const c of campaigns) rent += (await rentOf(c)) + (await rentOf(escrowOf(c)));
+  // 发货记录结算后保留,它的租金也由团长支付,一并加回来
+  const organizerNet = async (o: Signer, campaigns: Pk[], shippedBuyers: Pk[] = []) => {
+    let rent = (await rentOf(organizerStatsOf(o.publicKey))) + (await rentOf(organizerExtOf(o.publicKey)));
+    for (const c of campaigns) {
+      rent += (await rentOf(c)) + (await rentOf(escrowOf(c))) + (await rentOf(campaignExtOf(c)));
+      for (const b of shippedBuyers) rent += await rentOf(shipmentOf(c, b));
+    }
     return (await balance(o.publicKey)) - startBalances.get(o.publicKey.toBase58())! + rent;
   };
 
@@ -311,12 +377,14 @@ describe("dropsafe v2", () => {
         const campaign = pda(Buffer.from("campaign"), o.publicKey.toBuffer(), id.toArrayLike(Buffer, "le", 8));
         const now = await chainNow();
         const tx = await program.methods
-          .createCampaign(id, title, description, imageUrl, new BN(PRICE), 2, new BN(now + DAY), new BN(now + 2 * DAY), tierArg("shielded"))
+          .createCampaign(id, title, description, imageUrl, new BN(PRICE), 2, new BN(now + DAY), new BN(now + 2 * DAY), tierArg("shielded"), new BN(30 * DAY))
           .accountsPartial({
             organizer: o.publicKey,
             campaign,
             escrow: escrowOf(campaign),
             organizerStats: organizerStatsOf(o.publicKey),
+            campaignExt: campaignExtOf(campaign),
+            organizerStatsExt: organizerExtOf(o.publicKey),
             systemProgram: SystemProgram.programId,
           })
           .transaction();
@@ -823,6 +891,224 @@ describe("dropsafe v2", () => {
       let total = await organizerNet(organizer, [campaign]);
       for (const s of sybils) total += await buyerNet(s, [campaign]);
       assert.equal(total, 0);
+    });
+  });
+  // v2.2:每个名额自己的发货声明、ETA、两种报告和一次延长。所有场景一起建好,再一起等时间点
+  describe("v2.2 shipments, two report kinds and extensions", () => {
+    const ext = (o: Pk) => program.account.organizerStatsExt.fetch(organizerExtOf(o));
+    const shipmentAt = (c: Pk, b: Pk) => program.account.shipment.fetchNullable(shipmentOf(c, b));
+    // 主场景(部分保障,5 人):
+    // a 有声明,ETA 后报告未收到;b 有声明,提前确认;c 没声明,报告未按期发货;
+    // d 没声明,一直沉默;e 有声明,延长一次后沉默
+    let main: { organizer: Signer; a: Signer; b: Signer; c: Signer; d: Signer; e: Signer; campaign: Pk; shipBy: number; eta: number };
+    let batch: { organizer: Signer; buyers: Signer[]; campaign: Pk };
+    let unfilled: { organizer: Signer; buyer: Signer; campaign: Pk };
+    // 全额保障和无资金保障:x 有声明后报告未收到,y 没声明报告未按期发货
+    const payout = {} as Record<"shielded" | "trust", { organizer: Signer; x: Signer; y: Signer; campaign: Pk }>;
+    let stranger: Signer;
+    const MAX_TRANSIT = 40;
+
+    before(async function () {
+      this.timeout(200_000);
+      const pool = await wallets(27);
+      for (const w of pool) await track(w);
+      const take = (n: number) => pool.splice(0, n);
+      const now = await chainNow();
+      const deadline = now + 45;
+      const shipBy = deadline + 30;
+      const when = { deadline, delivery: shipBy, maxTransit: MAX_TRANSIT };
+
+      const [mo, a, b, c, d, e] = take(6);
+      const m = await create({ organizer: mo, tier: "standard", target: 5, ...when });
+      for (const w of [a, b, c, d, e]) await contribute(m.campaign, w);
+      await release(m.campaign, mo);
+
+      const [bo, ...bb] = take(11);
+      const bc = await create({ organizer: bo, tier: "standard", target: 10, price: 1_000_000, ...when });
+      for (const w of bb) await contribute(bc.campaign, w);
+      batch = { organizer: bo, buyers: bb, campaign: bc.campaign };
+
+      const [uo, ub] = take(2);
+      const uc = await create({ organizer: uo, tier: "standard", target: 2, ...when });
+      await contribute(uc.campaign, ub);
+      unfilled = { organizer: uo, buyer: ub, campaign: uc.campaign };
+
+      for (const tier of ["shielded", "trust"] as const) {
+        const [po, x, y] = take(3);
+        const pc = await create({ organizer: po, tier, target: 2, ...when });
+        await contribute(pc.campaign, x);
+        await contribute(pc.campaign, y);
+        await release(pc.campaign, po);
+        payout[tier] = { organizer: po, x, y, campaign: pc.campaign };
+      }
+      [stranger] = take(1);
+
+      const eta = (await chainNow()) + 20;
+      main = { organizer: mo, a, b, c, d, e, campaign: m.campaign, shipBy, eta };
+      assert.isBelow(eta, shipBy, "ETA should come before the shipping deadline in this scene");
+    });
+
+    it("rejects an invalid longest transit time at creation", async () => {
+      const o = await wallet();
+      await expectFail(() => create({ organizer: o, maxTransit: 0 }), "InvalidMaxTransit");
+      await expectFail(() => create({ organizer: o, maxTransit: 60 * DAY + 1 }), "InvalidMaxTransit");
+    });
+
+    it("records shipments only for the organizer, after filling and with a sane ETA", async () => {
+      const { organizer, a, campaign, eta } = main;
+      const now = await chainNow();
+      await expectFail(() => ship(campaign, stranger, [{ buyer: a.publicKey, eta }]), "NotOrganizer");
+      await expectFail(() => ship(campaign, organizer, [{ buyer: a.publicKey, eta: now - 5 }]), "InvalidEta");
+      await expectFail(() => ship(campaign, organizer, [{ buyer: a.publicKey, eta: now + MAX_TRANSIT + 30 }]), "InvalidEta");
+      await expectFail(() => ship(unfilled.campaign, unfilled.organizer, [{ buyer: unfilled.buyer.publicKey, eta }]), "ShippingClosed");
+      await expectFail(() => ship(campaign, organizer, []), "InvalidShipmentBatch");
+      assert.isNull(await shipmentAt(campaign, a.publicKey));
+    });
+
+    it("rolls back the whole batch on a duplicate, a foreign seat or a wrong record address", async () => {
+      const { organizer, a, b, campaign, eta } = main;
+      await expectFail(() => ship(campaign, organizer, [{ buyer: a.publicKey, eta }, { buyer: a.publicKey, eta }]), "ShipmentAlreadyRecorded");
+      const foreign = { buyer: batch.buyers[0].publicKey, eta, campaign: batch.campaign };
+      await expectFail(() => ship(campaign, organizer, [{ buyer: a.publicKey, eta }, foreign]), "InvalidShipmentAccount");
+      const swapped = { buyer: a.publicKey, eta, shipment: shipmentOf(campaign, b.publicKey) };
+      await expectFail(() => ship(campaign, organizer, [swapped]), "InvalidShipmentAccount");
+      assert.isNull(await shipmentAt(campaign, a.publicKey), "nothing from a failed batch is written");
+      assert.isNull(await shipmentAt(campaign, b.publicKey));
+    });
+
+    it("fits 8 seats in one batch (9 is too large), and stamps each record with chain time", async () => {
+      const { organizer, buyers, campaign } = batch;
+      await release(campaign, organizer);
+      const eta = (await chainNow()) + 30;
+      const sizeOf = async (n: number) => {
+        const tx = await shipmentIx(campaign, organizer, buyers.slice(0, n).map((w) => ({ buyer: w.publicKey, eta }))).transaction();
+        tx.feePayer = organizer.publicKey;
+        tx.recentBlockhash = (await connection.getLatestBlockhash()).blockhash;
+        return tx.serialize({ requireAllSignatures: false, verifySignatures: false }).length;
+      };
+      const eight = await sizeOf(8);
+      let nine = 0;
+      try {
+        nine = await sizeOf(9);
+      } catch (e) {
+        nine = Number(String(e).match(/(\d+) > 1232/)?.[1] ?? 9999);
+      }
+      console.log(`      shipment batch: 8 seats ${eight} bytes, 9 seats ${nine} bytes (limit 1232)`);
+      assert.isAtMost(eight, 1232);
+      assert.isAbove(nine, 1232, "the program's batch limit of 8 matches the transaction size");
+      const before = await chainNow();
+      // 10 个名额分两批:8 + 2
+      await ship(campaign, organizer, buyers.slice(0, 8).map((w) => ({ buyer: w.publicKey, eta })));
+      await ship(campaign, organizer, buyers.slice(8).map((w) => ({ buyer: w.publicKey, eta })));
+      for (const w of buyers) {
+        const rec = (await shipmentAt(campaign, w.publicKey))!;
+        assert.isTrue(rec.shipped);
+        assert.equal(rec.eta.toNumber(), eta);
+        assert.isAtLeast(rec.shippedAt.toNumber(), before - 2);
+        assert.isTrue(rec.buyer.equals(w.publicKey));
+      }
+      await expectFail(() => ship(campaign, organizer, [{ buyer: buyers[0].publicKey, eta }]), "ShipmentAlreadyRecorded");
+    });
+
+    it("before the ETA and the shipping deadline: the right report for each seat is still closed", async () => {
+      const { organizer, a, b, c, e, campaign, eta } = main;
+      await ship(campaign, organizer, [a, b, e].map((w) => ({ buyer: w.publicKey, eta })));
+      for (const tier of ["shielded", "trust"] as const) {
+        const p = payout[tier];
+        await ship(p.campaign, p.organizer, [{ buyer: p.x.publicKey, eta }]);
+      }
+      assert.isBelow(await chainNow(), eta, "this check must run before the ETA");
+      await expectFail(() => reportNotReceived(campaign, a), "TooEarlyToReport");
+      await expectFail(() => report(campaign, a), "SeatWasShipped");
+      await expectFail(() => report(campaign, c), "TooEarlyToReport");
+      await expectFail(() => reportNotReceived(campaign, c), "SeatNotShipped");
+      await expectFail(() => extend(campaign, c), "ExtensionNotAvailable");
+      await expectFail(() => extend(campaign, e), "ExtensionNotAvailable");
+      // 截止前随时可以确认收货,包括还没到 ETA
+      await confirm(campaign, b);
+      assert.isNull(await shipmentAt(campaign, c.publicKey), "an early extension attempt leaves no record");
+    });
+
+    it("after the ETA: shipped seats can report or extend once, and only once", async () => {
+      const { a, e, campaign, eta } = main;
+      await waitUntilPast(eta);
+      await reportNotReceived(campaign, a);
+      await expectFail(() => extend(campaign, a), "SeatAlreadyDecided");
+      await extend(campaign, e);
+      await expectFail(() => extend(campaign, e), "ExtensionUsed");
+      assert.isTrue((await shipmentAt(campaign, e.publicKey))!.extensionUsed);
+      assert.equal((await ext(main.organizer.publicKey)).unverifiedReports.toNumber(), 1);
+      for (const tier of ["shielded", "trust"] as const) await reportNotReceived(payout[tier].campaign, payout[tier].x);
+    });
+
+    it("after the shipping deadline: unshipped seats can report, and shipments can't be added", async () => {
+      const { organizer, c, d, campaign, shipBy } = main;
+      await waitUntilPast(shipBy);
+      const lateEta = (await chainNow()) + 5;
+      await expectFail(() => ship(campaign, organizer, [{ buyer: d.publicKey, eta: lateEta }]), "ShippingClosed");
+      await report(campaign, c);
+      await expectFail(() => report(campaign, c), "SeatAlreadyDecided");
+      for (const tier of ["shielded", "trust"] as const) await report(payout[tier].campaign, payout[tier].y);
+      assert.equal((await ext(organizer.publicKey)).unverifiedReports.toNumber(), 2, "each report counts once");
+    });
+
+    it("settles decided seats at once and silent seats only after their own deadline", async () => {
+      const { organizer, a, b, c, d, e, campaign } = main;
+      await settle(campaign, a.publicKey, stranger);
+      await settle(campaign, b.publicKey, stranger);
+      await settle(campaign, c.publicKey, stranger);
+      await expectFail(() => settle(campaign, d.publicKey, stranger), "SeatNotSettleable");
+      await expectFail(() => settle(campaign, e.publicKey, stranger), "SeatNotSettleable");
+      // 已结算的名额不能再结算,发货记录仍然保留
+      await expectFail(() => settle(campaign, a.publicKey, stranger), "AccountNotInitialized");
+      assert.isNotNull(await shipmentAt(campaign, a.publicKey));
+      assert.equal(await statusOf(campaign), "active");
+      await expectFail(() => finalize(campaign, stranger), "NotFinalizable");
+      // 报告"未按期发货"的 c 在发货期限后结算,记一次缺失发货记录
+      assert.equal((await ext(organizer.publicKey)).missingShipmentRecordSeats.toNumber(), 1);
+    });
+
+    it("pays reports by tier, whichever kind of report it was", async () => {
+      // 全额保障:两种报告都拿回全款;无资金保障:两种都拿不回
+      const expected = { shielded: 0, trust: -PRICE };
+      for (const tier of ["shielded", "trust"] as const) {
+        const p = payout[tier];
+        await settle(p.campaign, p.x.publicKey, stranger);
+        await settle(p.campaign, p.y.publicKey, stranger);
+        assert.equal(await buyerNet(p.x, [p.campaign]), expected[tier], `${tier} not received`);
+        assert.equal(await buyerNet(p.y, [p.campaign]), expected[tier], `${tier} unshipped`);
+        assert.equal(await escrowHeld(p.campaign), 0);
+        assert.equal((await ext(p.organizer.publicKey)).missingShipmentRecordSeats.toNumber(), 1);
+        assert.equal((await ext(p.organizer.publicKey)).unverifiedReports.toNumber(), 2);
+      }
+    });
+
+    it("a silent unshipped seat settles to the organizer after ship-by plus the window", async () => {
+      const { organizer, d, e, campaign, shipBy } = main;
+      await waitUntilPast(shipBy + APPEAL);
+      await settle(campaign, d.publicKey, stranger);
+      assert.equal((await ext(organizer.publicKey)).missingShipmentRecordSeats.toNumber(), 2);
+      // e 延长过,截止时间晚一个申诉期,还不能结算
+      await expectFail(() => settle(campaign, e.publicKey, stranger), "SeatNotSettleable");
+      await expectFail(() => confirm(campaign, d), "AccountNotInitialized");
+    });
+
+    it("the extended seat settles last, then the group buy closes", async () => {
+      const { organizer, a, b, c, d, e, campaign, eta } = main;
+      await waitUntilPast(eta + APPEAL + APPEAL);
+      await settle(campaign, e.publicKey, stranger);
+      await finalize(campaign, stranger);
+      assert.equal(await statusOf(campaign), "closed");
+      assert.equal(await escrowHeld(campaign), 0);
+      // 部分保障:报告的 a 和 c 拿回 30%,其余三个名额的尾款给团长
+      assert.equal(await buyerNet(a, [campaign]), -UPFRONT);
+      assert.equal(await buyerNet(c, [campaign]), -UPFRONT);
+      for (const w of [b, d, e]) assert.equal(await buyerNet(w, [campaign]), -PRICE);
+      const shipped = [a, b, e].map((w) => w.publicKey);
+      assert.equal(await organizerNet(organizer, [campaign], shipped), UPFRONT * 5 + REMAINDER * 3);
+      const stats = await ext(organizer.publicKey);
+      assert.equal(stats.unverifiedReports.toNumber(), 2);
+      assert.equal(stats.missingShipmentRecordSeats.toNumber(), 2);
     });
   });
 });

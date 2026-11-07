@@ -72,4 +72,26 @@ pub enum ErrorCode {
     /// 新错误放在最后,保持已有错误码的编号不变
     #[msg("The organizer cannot join their own group buy")]
     OrganizerCannotJoin,
+    #[msg("The longest transit time must be between 1 second and 60 days")]
+    InvalidMaxTransit,
+    #[msg("This group buy was created before shipment records existed")]
+    NoShippingRules,
+    #[msg("A shipment batch must list between 1 and 8 seats, with two accounts per seat")]
+    InvalidShipmentBatch,
+    #[msg("Shipments can be recorded only after the group fills and before the shipping deadline")]
+    ShippingClosed,
+    #[msg("The ETA must be between now and now plus the longest transit time")]
+    InvalidEta,
+    #[msg("This seat already has a shipment record")]
+    ShipmentAlreadyRecorded,
+    #[msg("This account is not the seat or shipment record it claims to be")]
+    InvalidShipmentAccount,
+    #[msg("This seat has a shipment record, so report that it didn't arrive instead")]
+    SeatWasShipped,
+    #[msg("This seat has no shipment record, so report that it wasn't shipped instead")]
+    SeatNotShipped,
+    #[msg("This seat's waiting period has already been extended once")]
+    ExtensionUsed,
+    #[msg("The waiting period can be extended only while this seat's report window is open")]
+    ExtensionNotAvailable,
 }

@@ -3,7 +3,11 @@
 //! 买家的钱和团长的保证金都存进没有私钥的托管账户,按三档规则结算:
 //! - 全额保障(Shielded):团长先存保证金,团长不发货时买家拿回全额
 //! - 部分保障(Standard):团长先拿 70%,不发货时买家拿回 30%
-//! - 信任团(Trust):成团后团长拿 100%,买家的报告只留下记录
+//! - 无资金保障(Unsecured,程序里叫 Trust):成团后团长拿 100%,买家的报告只留下记录
+//!
+//! v2.2 起每个名额有自己的履约记录:团长在发货期限前提交发货声明和 ETA,
+//! 没有声明的名额从发货期限起可以报告"未按期发货",有声明的从 ETA 起可以报告"未收到"。
+//! 合约只记录双方的声明和期限,不判断现实中的包裹有没有送达。
 
 pub mod constants;
 pub mod error;
@@ -35,6 +39,7 @@ pub mod dropsafe {
         deadline: i64,
         delivery_deadline: i64,
         tier: Tier,
+        max_transit_seconds: i64,
     ) -> Result<()> {
         crate::instructions::create_campaign::handle_create_campaign(
             ctx,
@@ -47,6 +52,7 @@ pub mod dropsafe {
             deadline,
             delivery_deadline,
             tier,
+            max_transit_seconds,
         )
     }
 
@@ -85,14 +91,32 @@ pub mod dropsafe {
         crate::instructions::confirm_delivery::handle_confirm_delivery(ctx)
     }
 
-    /// 买家在申诉期内报告未收到
+    /// 买家报告未收到:新规则下需要有发货声明且 ETA 已过;旧团购按原来的申诉期
     pub fn report_not_received(ctx: Context<ReportNotReceived>) -> Result<()> {
         crate::instructions::report_not_received::handle_report_not_received(ctx)
+    }
+
+    /// 新规则:发货期限已过且没有发货声明时,买家报告未按期发货
+    pub fn report_unshipped(ctx: Context<ReportNotReceived>) -> Result<()> {
+        crate::instructions::report_not_received::handle_report_unshipped(ctx)
     }
 
     /// 结算一个名额,任何人都可以调用
     pub fn settle_seat(ctx: Context<SettleSeat>) -> Result<()> {
         crate::instructions::settle_seat::handle_settle_seat(ctx)
+    }
+
+    /// 团长批量提交发货声明:每个名额一条记录,ETA 由团长填写,发货时间用链上时间
+    pub fn record_shipment_batch<'info>(
+        ctx: Context<'info, RecordShipmentBatch<'info>>,
+        entries: Vec<ShipmentEntry>,
+    ) -> Result<()> {
+        crate::instructions::record_shipment_batch::handle_record_shipment_batch(ctx, entries)
+    }
+
+    /// 买家把自己名额的申诉截止时间延长一次
+    pub fn extend_waiting(ctx: Context<ExtendWaiting>) -> Result<()> {
+        crate::instructions::extend_waiting::handle_extend_waiting(ctx)
     }
 
     /// 记录活动的最终结果,任何人都可以调用,只能一次

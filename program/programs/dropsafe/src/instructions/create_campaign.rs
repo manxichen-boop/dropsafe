@@ -46,6 +46,26 @@ pub struct CreateCampaign<'info> {
     )]
     pub organizer_stats: Box<Account<'info, OrganizerStats>>,
 
+    /// 新规则账户:存最长运输时间。有它的团购按发货记录和 ETA 计算申诉期
+    #[account(
+        init,
+        payer = organizer,
+        space = 8 + CampaignExt::INIT_SPACE,
+        seeds = [CAMPAIGN_EXT_SEED, campaign.key().as_ref()],
+        bump
+    )]
+    pub campaign_ext: Box<Account<'info, CampaignExt>>,
+
+    /// 团长扩展记录:和团长记录一样由团长在第一次创建活动时初始化
+    #[account(
+        init_if_needed,
+        payer = organizer,
+        space = 8 + OrganizerStatsExt::INIT_SPACE,
+        seeds = [ORGANIZER_EXT_SEED, organizer.key().as_ref()],
+        bump
+    )]
+    pub organizer_stats_ext: Box<Account<'info, OrganizerStatsExt>>,
+
     pub system_program: Program<'info, System>,
 }
 
@@ -61,7 +81,12 @@ pub fn handle_create_campaign(
     deadline: i64,
     delivery_deadline: i64,
     tier: Tier,
+    max_transit_seconds: i64,
 ) -> Result<()> {
+    require!(
+        max_transit_seconds > 0 && max_transit_seconds <= MAX_TRANSIT_LIMIT_SECONDS,
+        ErrorCode::InvalidMaxTransit
+    );
     let now = Clock::get()?.unix_timestamp;
 
     // 校验:文本长度。同时限制字符数和字节数,防止超过账户空间
@@ -146,6 +171,15 @@ pub fn handle_create_campaign(
         bump: ctx.bumps.campaign,
     });
     ctx.accounts.escrow.bump = ctx.bumps.escrow;
+    ctx.accounts.campaign_ext.set_inner(CampaignExt {
+        campaign: ctx.accounts.campaign.key(),
+        max_transit_seconds,
+        bump: ctx.bumps.campaign_ext,
+    });
+
+    let ext = &mut ctx.accounts.organizer_stats_ext;
+    ext.organizer = ctx.accounts.organizer.key();
+    ext.bump = ctx.bumps.organizer_stats_ext;
 
     let stats = &mut ctx.accounts.organizer_stats;
     stats.organizer = ctx.accounts.organizer.key();

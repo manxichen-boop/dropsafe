@@ -10,6 +10,12 @@ pub const CONTRIBUTION_SEED: &[u8] = b"contribution";
 pub const ORGANIZER_SEED: &[u8] = b"organizer";
 #[constant]
 pub const BUYER_SEED: &[u8] = b"buyer";
+#[constant]
+pub const CAMPAIGN_EXT_SEED: &[u8] = b"campaign_ext";
+#[constant]
+pub const SHIPMENT_SEED: &[u8] = b"shipment";
+#[constant]
+pub const ORGANIZER_EXT_SEED: &[u8] = b"organizer_stats_ext";
 
 /// 文本长度上限。字符数限制给用户看,字节数限制决定账户占多大空间
 pub const MAX_TITLE_CHARS: usize = 50;
@@ -35,3 +41,12 @@ pub const APPEAL_WINDOW_SECONDS: i64 = 7 * DAY;
 /// devnet-demo 构建下只有 60 秒,方便录视频和跑测试
 #[cfg(feature = "devnet-demo")]
 pub const APPEAL_WINDOW_SECONDS: i64 = 60;
+
+/// 买家可以把自己名额的申诉截止时间延长一次,延长的长度等于一个申诉期
+pub const EXTENSION_SECONDS: i64 = APPEAL_WINDOW_SECONDS;
+
+/// 团长开团时声明的最长运输时间,不能超过 60 天。ETA 必须落在 [发货时间, 发货时间 + 最长运输时间]
+pub const MAX_TRANSIT_LIMIT_SECONDS: i64 = 60 * DAY;
+
+/// 一笔批量发货交易最多记录的名额数。实测:8 个名额能放进 1232 字节的交易,9 个就超了
+pub const MAX_SHIPMENT_BATCH: usize = 8;

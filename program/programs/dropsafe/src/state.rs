@@ -78,17 +78,6 @@ pub struct Campaign {
 }
 
 impl Campaign {
-    /// 申诉期的边界只在这里定义,所有指令共用,前端用同样的规则:
-    /// 报告从 delivery_deadline 这一秒开始(含),
-    /// 到 appeal_end 这一秒结束(不含)。正好等于 appeal_end 时不能再报告或确认,但可以结算
-    pub fn report_opened(&self, now: i64) -> bool {
-        now >= self.delivery_deadline
-    }
-
-    pub fn appeal_open(&self, now: i64) -> bool {
-        now < self.appeal_end
-    }
-
     /// 预付款 = price * 7 / 10
     pub fn upfront(&self) -> Result<u64> {
         upfront_of(self.price)
@@ -187,6 +176,100 @@ pub struct BuyerStats {
     pub bump: u8,
 }
 
+/// 新规则的开关:新建的团购都有这个账户,存团长声明的最长运输时间。
+/// 没有这个账户的旧团购继续用 v2.1 的时间规则
+#[account]
+#[derive(InitSpace)]
+pub struct CampaignExt {
+    pub campaign: Pubkey,
+    pub max_transit_seconds: i64,
+    pub bump: u8,
+}
+
+/// 一个名额的履约记录,种子是 ["shipment", 名额凭证]。结算后保留,作为公开记录。
+/// shipped = true 表示团长在发货期限前提交了发货声明。
+/// 这只是团长的声明,合约无法验证包裹真的寄出。
+/// shipped = false 的记录只会在买家延长等待期时创建(那时发货期限已过且没有发货声明)
+#[account]
+#[derive(InitSpace)]
+pub struct Shipment {
+    pub campaign: Pubkey,
+    pub buyer: Pubkey,
+    pub shipped: bool,
+    /// 链上时间,不由团长填写
+    pub shipped_at: i64,
+    pub eta: i64,
+    /// 物流参考信息的哈希,不存单号、姓名或地址
+    pub reference_hash: [u8; 32],
+    pub extension_used: bool,
+    pub bump: u8,
+}
+
+/// 团长的扩展记录,和 OrganizerStats 分开存,旧账户不用迁移
+#[account]
+#[derive(InitSpace)]
+pub struct OrganizerStatsExt {
+    pub organizer: Pubkey,
+    /// 结算时没有链上发货记录的名额(只说明没有声明,不证明现实中没发货)
+    pub missing_shipment_record_seats: u64,
+    /// 买家提交的报告,两种都算,都没有经过仲裁
+    pub unverified_reports: u64,
+    pub bump: u8,
+}
+
+/// 一个名额的报告窗口:从 opens(含)到 closes(不含)。
+/// 所有指令和前端都用这一个函数,保证边界一致
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct SeatWindow {
+    pub opens: i64,
+    pub closes: i64,
+    /// 新规则下是否有发货声明;旧团购为 None
+    pub shipped: Option<bool>,
+}
+
+impl SeatWindow {
+    pub fn report_open(&self, now: i64) -> bool {
+        now >= self.opens && now < self.closes
+    }
+    /// 确认收货和延长都要在截止前
+    pub fn before_close(&self, now: i64) -> bool {
+        now < self.closes
+    }
+}
+
+/// 计算名额的报告窗口。
+/// - 旧团购:发货期限 → appeal_end
+/// - 新规则、有发货声明:ETA → ETA + 申诉期(延长后再加一个申诉期)
+/// - 新规则、没有发货声明:发货期限 → 发货期限 + 申诉期(延长后再加一个申诉期)
+pub fn seat_window(campaign: &Campaign, has_rules: bool, shipment: Option<&Shipment>) -> Result<SeatWindow> {
+    if !has_rules {
+        return Ok(SeatWindow { opens: campaign.delivery_deadline, closes: campaign.appeal_end, shipped: None });
+    }
+    let shipped = shipment.map(|s| s.shipped).unwrap_or(false);
+    let opens = match shipment {
+        Some(s) if s.shipped => s.eta,
+        _ => campaign.delivery_deadline,
+    };
+    let extra = if shipment.map(|s| s.extension_used).unwrap_or(false) { EXTENSION_SECONDS } else { 0 };
+    let closes = opens
+        .checked_add(APPEAL_WINDOW_SECONDS)
+        .and_then(|v| v.checked_add(extra))
+        .ok_or(ErrorCode::MathOverflow)?;
+    Ok(SeatWindow { opens, closes, shipped: Some(shipped) })
+}
+
+/// 读取一个可能不存在的程序账户:地址已经由 seeds 约束校验过。
+/// 不存在(系统账户、没有数据)返回 None;存在就必须是本程序的、类型正确的账户
+pub fn load_optional<T: AccountDeserialize + Owner>(info: &AccountInfo) -> Result<Option<T>> {
+    if info.data_is_empty() && info.owner == &anchor_lang::system_program::ID {
+        return Ok(None);
+    }
+    require_keys_eq!(*info.owner, T::owner(), ErrorCode::InvalidShipmentAccount);
+    let data = info.try_borrow_data()?;
+    let mut slice: &[u8] = &data;
+    Ok(Some(T::try_deserialize(&mut slice)?))
+}
+
 /// 计数加 1,溢出时报错
 pub fn increment(value: &mut u64) -> Result<()> {
     *value = value.checked_add(1).ok_or(ErrorCode::MathOverflow)?;
@@ -247,24 +330,69 @@ mod tests {
         assert_eq!(APPEAL_WINDOW_SECONDS, 60);
     }
 
-    #[test]
-    fn report_opens_exactly_at_the_shipping_deadline() {
-        let c = campaign(1_000, 1_000 + APPEAL_WINDOW_SECONDS);
-        assert!(!c.report_opened(999));
-        assert!(c.report_opened(1_000));
-        assert!(c.report_opened(1_001));
+    fn shipment(shipped: bool, eta: i64, extension_used: bool) -> Shipment {
+        Shipment {
+            campaign: Pubkey::default(),
+            buyer: Pubkey::default(),
+            shipped,
+            shipped_at: 0,
+            eta,
+            reference_hash: [0; 32],
+            extension_used,
+            bump: 0,
+        }
+    }
+
+    // 检查一个窗口在开始前 1 秒、开始、截止前 1 秒、截止、截止后 1 秒的表现
+    fn assert_edges(w: SeatWindow, opens: i64, closes: i64) {
+        assert_eq!((w.opens, w.closes), (opens, closes));
+        assert!(!w.report_open(opens - 1), "before opening");
+        assert!(w.report_open(opens), "at opening");
+        assert!(w.report_open(closes - 1), "one second before closing");
+        assert!(!w.report_open(closes), "exactly at closing");
+        assert!(!w.report_open(closes + 1), "one second after closing");
+        assert!(w.before_close(closes - 1));
+        assert!(!w.before_close(closes));
     }
 
     #[test]
-    fn appeal_closes_exactly_at_appeal_end() {
-        let end = 1_000 + APPEAL_WINDOW_SECONDS;
-        let c = campaign(1_000, end);
-        // 截止前 1 秒:还能报告和确认,不能结算未回应的名额
-        assert!(c.appeal_open(end - 1));
-        // 正好等于截止时间:窗口已关闭,只能结算
-        assert!(!c.appeal_open(end));
-        // 截止后 1 秒:窗口已关闭
-        assert!(!c.appeal_open(end + 1));
+    fn legacy_campaigns_keep_the_old_window() {
+        let c = campaign(1_000, 1_000 + APPEAL_WINDOW_SECONDS);
+        let w = seat_window(&c, false, None).unwrap();
+        assert_eq!(w.shipped, None);
+        assert_edges(w, 1_000, 1_000 + APPEAL_WINDOW_SECONDS);
+    }
+
+    #[test]
+    fn unshipped_seats_open_at_the_shipping_deadline() {
+        let c = campaign(1_000, 0);
+        let w = seat_window(&c, true, None).unwrap();
+        assert_eq!(w.shipped, Some(false));
+        assert_edges(w, 1_000, 1_000 + APPEAL_WINDOW_SECONDS);
+    }
+
+    #[test]
+    fn shipped_seats_open_at_their_own_eta() {
+        let c = campaign(1_000, 0);
+        let w = seat_window(&c, true, Some(&shipment(true, 5_000, false))).unwrap();
+        assert_eq!(w.shipped, Some(true));
+        assert_edges(w, 5_000, 5_000 + APPEAL_WINDOW_SECONDS);
+        // ETA 早于发货期限也按 ETA 算
+        let early = seat_window(&c, true, Some(&shipment(true, 500, false))).unwrap();
+        assert_edges(early, 500, 500 + APPEAL_WINDOW_SECONDS);
+    }
+
+    #[test]
+    fn an_extension_adds_one_window_to_that_seat_only() {
+        let c = campaign(1_000, 0);
+        let extended = seat_window(&c, true, Some(&shipment(true, 5_000, true))).unwrap();
+        assert_edges(extended, 5_000, 5_000 + APPEAL_WINDOW_SECONDS + EXTENSION_SECONDS);
+        let other = seat_window(&c, true, Some(&shipment(true, 5_000, false))).unwrap();
+        assert_eq!(other.closes, 5_000 + APPEAL_WINDOW_SECONDS);
+        // 没有发货声明、买家延长过:从发货期限算起,多一个申诉期
+        let unshipped = seat_window(&c, true, Some(&shipment(false, 0, true))).unwrap();
+        assert_eq!(unshipped.shipped, Some(false));
+        assert_edges(unshipped, 1_000, 1_000 + APPEAL_WINDOW_SECONDS + EXTENSION_SECONDS);
     }
 
     #[test]

@@ -4,7 +4,8 @@ use crate::{constants::*, error::ErrorCode, state::*};
 
 #[derive(Accounts)]
 pub struct SettleSeat<'info> {
-    /// 任何人都可以调用,钱只会转给合约固定的地址
+    /// 任何人都可以调用,钱只会转给合约固定的地址;第一次给团长记扩展统计时付租金
+    #[account(mut)]
     pub caller: Signer<'info>,
 
     /// 团长:收款地址由合约固定
@@ -39,6 +40,25 @@ pub struct SettleSeat<'info> {
     #[account(mut, seeds = [ORGANIZER_SEED, campaign.organizer.as_ref()], bump = organizer_stats.bump)]
     pub organizer_stats: Box<Account<'info, OrganizerStats>>,
 
+    /// CHECK: 地址由 seeds 校验;不存在表示旧团购
+    #[account(seeds = [CAMPAIGN_EXT_SEED, campaign.key().as_ref()], bump)]
+    pub campaign_ext: UncheckedAccount<'info>,
+
+    /// CHECK: 地址由 seeds 校验;不存在表示没有发货声明。结算后保留,作为公开记录
+    #[account(seeds = [SHIPMENT_SEED, contribution.key().as_ref()], bump)]
+    pub shipment: UncheckedAccount<'info>,
+
+    #[account(
+        init_if_needed,
+        payer = caller,
+        space = 8 + OrganizerStatsExt::INIT_SPACE,
+        seeds = [ORGANIZER_EXT_SEED, campaign.organizer.as_ref()],
+        bump
+    )]
+    pub organizer_stats_ext: Box<Account<'info, OrganizerStatsExt>>,
+
+    pub system_program: Program<'info, System>,
+
     #[account(mut, seeds = [BUYER_SEED, buyer.key().as_ref()], bump = buyer_stats.bump)]
     pub buyer_stats: Account<'info, BuyerStats>,
 }
@@ -55,12 +75,16 @@ pub fn handle_settle_seat(ctx: Context<SettleSeat>) -> Result<()> {
     let upfront = campaign.upfront()?;
     let remainder = campaign.remainder()?;
     let seat = ctx.accounts.contribution.status;
+    let has_rules = load_optional::<CampaignExt>(&ctx.accounts.campaign_ext.to_account_info())?.is_some();
+    let shipment = load_optional::<Shipment>(&ctx.accounts.shipment.to_account_info())?;
+    let window = seat_window(campaign, has_rules, shipment.as_ref())?;
 
     // 尾款只有在买家确认或申诉期结束后才能给团长
     let pays_organizer = match seat {
         ContributionStatus::Confirmed => true,
         ContributionStatus::Paid => {
-            require!(!campaign.appeal_open(now), ErrorCode::SeatNotSettleable);
+            // 这个名额自己的截止时间过了才能默认结算;别的名额延长不影响这里
+            require!(!window.before_close(now), ErrorCode::SeatNotSettleable);
             true
         }
         ContributionStatus::Reported => false,
@@ -99,6 +123,15 @@ pub fn handle_settle_seat(ctx: Context<SettleSeat>) -> Result<()> {
             increment(&mut tier_stats.seats_reported)?;
             increment(&mut buyer_stats.seats_reported)?;
         }
+    }
+
+    // 发货期限过后结算时仍没有发货声明,记一次"缺失发货记录"。
+    // 名额凭证结算后关闭,所以每个名额只会计一次
+    let ext = &mut ctx.accounts.organizer_stats_ext;
+    ext.organizer = campaign.organizer;
+    ext.bump = ctx.bumps.organizer_stats_ext;
+    if window.shipped == Some(false) && now >= campaign.delivery_deadline {
+        increment(&mut ext.missing_shipment_record_seats)?;
     }
 
     let campaign = &mut ctx.accounts.campaign;
