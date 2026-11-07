@@ -197,7 +197,7 @@ export function NewGroupBuyWindow({ win }: { win: OSWindow }) {
       </fieldset>
 
       <Field id="title" label={t.create.name} error={show("title")}>
-        <input id="title" className="field" value={title} placeholder={t.create.namePlaceholder} {...bind("title", setTitle)} {...aria("title")} />
+        <input id="title" className="field" value={title} {...bind("title", setTitle)} {...aria("title")} />
       </Field>
       <Field id="image" label={t.create.image} error={show("image")} hint={t.create.imageHint}>
         <input id="image" type="url" className="field" value={image} {...bind("image", setImage)} {...aria("image", true)} />
