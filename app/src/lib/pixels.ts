@@ -437,10 +437,20 @@ const MINI_LOCKIE = [
   "..TT...TT..",
 ];
 
+// 牛皮纸色系:饱和度低,花纹只比底色深浅一点,不抢视线
+const KRAFT = {
+  base: "#D9CAAA",
+  light: "#E4D8BE",
+  band: "#CFBE9A",
+  main: "#CBB993",
+  motif: "#B9A47D",
+  dark: "#A08B66",
+};
+
 export function drawFairIsle(): Grid {
   const W = 16;
   const H = 44;
-  const rows: Grid = Array.from({ length: H }, () => Array<string | null>(W).fill(LINE));
+  const rows: Grid = Array.from({ length: H }, () => Array<string | null>(W).fill(KRAFT.base));
   const band = (y0: number, bg: string, fg: string) => {
     // 五针高的小菱形带
     for (let x = 0; x < W; x++) for (let y = y0; y < y0 + 5; y++) rows[y][x] = bg;
@@ -450,21 +460,21 @@ export function drawFairIsle(): Grid {
       if (x % 4 === 2) rows[y0 + 3][x] = fg;
     }
   };
-  for (let x = 0; x < W; x += 2) rows[1][x] = GRAY;
-  band(3, TOMATO, SUN);
-  // 主花纹带:黄底,一排 Lockie 抱着硬币,中间夹一个小十字
-  for (let y = 9; y < 23; y++) for (let x = 0; x < W; x++) rows[y][x] = SUN;
-  const colors: Record<string, string> = { T: TOMATO, K: INK, P: PAPER };
+  for (let x = 0; x < W; x += 2) rows[1][x] = KRAFT.motif;
+  band(3, KRAFT.band, KRAFT.dark);
+  // 主花纹带:一排 Lockie 抱着硬币,中间夹一个小十字
+  for (let y = 9; y < 23; y++) for (let x = 0; x < W; x++) rows[y][x] = KRAFT.main;
+  const colors: Record<string, string> = { T: KRAFT.motif, K: KRAFT.dark, P: KRAFT.light };
   MINI_LOCKIE.forEach((line, dy) =>
     [...line].forEach((ch, dx) => {
       if (ch !== ".") rows[11 + dy][2 + dx] = colors[ch];
     })
   );
-  for (const [x, y] of [[14, 14], [14, 15], [14, 16], [13, 15], [15, 15]]) rows[y][x] = TOMATO;
-  band(24, SAFE, PAPER);
+  for (const [x, y] of [[14, 14], [14, 15], [14, 16], [13, 15], [15, 15]]) rows[y][x] = KRAFT.motif;
+  band(24, KRAFT.band, KRAFT.light);
   // 花纹带之间留一段米色,稀疏的小点像毛衣上的间隔花
-  for (let x = 4; x < W; x += 8) rows[33][x] = GRAY;
-  for (let x = 0; x < W; x += 8) rows[38][x] = GRAY;
+  for (let x = 4; x < W; x += 8) rows[33][x] = KRAFT.motif;
+  for (let x = 0; x < W; x += 8) rows[38][x] = KRAFT.motif;
   return rows;
 }
 

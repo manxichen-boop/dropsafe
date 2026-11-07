@@ -51,17 +51,18 @@ const CORNER_ICONS: { icon: IconName; kind: WindowKind }[] = [
   { icon: "privacy", kind: "privacy" },
 ];
 
-// 桌面壁纸:费尔岛花纹,每一针放大成 4 像素
+// 桌面壁纸:牛皮纸色的费尔岛花纹,每一针放大成 4 像素
 function Wallpaper() {
   const url = useMemo(() => {
     const svg = gridToSvg(drawFairIsle()).replace(/</g, "%3C").replace(/>/g, "%3E").replace(/#/g, "%23");
     return `url("data:image/svg+xml,${svg}")`;
   }, []);
   return (
-    // 米色底上铺半透明花纹:颜色柔和一点,桌面图标和文字仍然看得清
-    <div aria-hidden className="pointer-events-none absolute inset-0 bg-line">
-      <div className="absolute inset-0 opacity-55 [image-rendering:pixelated]" style={{ backgroundImage: url, backgroundSize: "64px 176px" }} />
-    </div>
+    <div
+      aria-hidden
+      className="pointer-events-none absolute inset-0 [image-rendering:pixelated]"
+      style={{ backgroundImage: url, backgroundSize: "64px 176px" }}
+    />
   );
 }
 
