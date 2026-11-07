@@ -12,15 +12,15 @@ Fans organize group buys for K-pop merch and limited drops every day. Buyers sen
 
 ## The solution
 
-DropSafe puts the money somewhere the organizer can't touch until the deal is on:
+DropSafe holds the money in an on-chain escrow and releases it in stages:
 
-- Buyers pay into an **escrow account controlled by the program**. It has no private key, so nobody can move the funds outside the rules.
+- Buyers pay into an **escrow account controlled by the program**. It has no private key, so funds move only through the program's instructions.
 - **Target missed by the deadline:** every buyer takes their own SOL back, without asking anyone.
 - **Target reached:** the organizer can withdraw **70%** to place the order. The other **30%** stays in escrow.
 - **Goods arrive:** a buyer confirms delivery, and their 30% goes to the organizer.
 - **Goods don't arrive:** after the shipping deadline, a buyer can report it during the dispute window and take their 30% back.
 - **No complaint:** after the dispute window closes, the organizer can claim the shares nobody disputed.
-- **Organizer never withdraws:** after the shipping deadline, every buyer can take back their full payment, so funds never get stuck.
+- **Organizer never withdraws:** after the shipping deadline, every buyer can take back their full payment, so the money isn't left sitting in escrow.
 
 ## Architecture
 
@@ -113,6 +113,7 @@ This is a hackathon prototype on Devnet and has not been audited. Staged payouts
 - An organizer who runs off after withdrawing still keeps the 70%. Buyers can only recover the 30%.
 - A dishonest buyer can report non-delivery after receiving their goods and keep the 30%. There is no arbitration yet.
 - An organizer can fill their own campaign using several wallets.
+- The program is upgradeable. Whoever holds the upgrade authority, currently the deployer's wallet, could change the rules.
 
 About 0.001 SOL of rent paid by the organizer stays in each escrow account.
 
@@ -122,8 +123,8 @@ The tag `v1-submission` is the earlier version, without staged payouts. Its prog
 
 ## Future Work
 
+- Organizer deposits: the organizer locks a deposit when creating a campaign, paid out to buyers if the goods never ship. This is meant to cover the remaining risk on the 70% released before delivery.
 - Dispute handling and arbitration
-- Organizer deposits
 - USDC and other SPL tokens
 
 ## Tech stack

@@ -16,9 +16,9 @@ const en = {
     "no-wallet": "Connect wallet",
   },
   home: {
-    title: "Group buys where your money only moves when the deal is real.",
+    title: "Group buys with the money held on-chain until it's earned.",
     subtitle:
-      "Buyers pay into an escrow account with no private key. Miss the target and everyone takes their SOL back. Hit it, and only then can the organizer withdraw.",
+      "Your SOL goes into an escrow account with no private key. If the group doesn't fill by the deadline, every buyer takes their full share back. If it fills, the organizer receives 70% to place the order, and the last 30% waits until buyers confirm delivery.",
     mascotAlt: "Lockie, a round orange coin jar, hugging a coin",
     storyTitle: "How your coins travel",
     story1: "Buyers drop their SOL into Lockie",
@@ -109,7 +109,7 @@ const en = {
     dispute: (sol: string) => `I didn't get my goods. Get ${sol} SOL back`,
     claim: (sol: string, n: number) => `Claim ${sol} SOL from ${n} ${n === 1 ? "buyer" : "buyers"}`,
     wait: {
-      open: "You've joined. Your SOL is safe in escrow.",
+      open: "You've joined. Your SOL is in escrow.",
       fundedJoined: "You've joined and the group filled. Waiting for the organizer to withdraw.",
       fundedOther: "This group is full.",
       noClaim: "You have no SOL to claim here.",
@@ -198,8 +198,8 @@ const zh: Messages = {
     "no-wallet": "连接钱包",
   },
   home: {
-    title: "只有交易真的成立,你的钱才会动。",
-    subtitle: "买家的钱存进一个没有私钥的托管账户。人没凑满,每个人都能取回自己的 SOL;凑满了,团长才能提取。",
+    title: "团购的钱留在链上,赚到了才放出。",
+    subtitle: "你的 SOL 存进一个没有私钥的托管账户。截止时没凑满,每位买家都能全额取回。凑满后,团长收到 70% 去下单,剩下 30% 等买家确认收货。",
     mascotAlt: "Lockie,一个圆滚滚的橙色存钱罐,抱着一枚硬币",
     storyTitle: "你的硬币怎么走",
     story1: "买家把 SOL 投进 Lockie",
@@ -290,7 +290,7 @@ const zh: Messages = {
     dispute: (sol) => `我没收到货,取回 ${sol} SOL`,
     claim: (sol, n) => `领取 ${n} 位买家的 ${sol} SOL`,
     wait: {
-      open: "你已参团,你的 SOL 安全地存在托管里。",
+      open: "你已参团,你的 SOL 已存进托管。",
       fundedJoined: "你已参团,并且已经成团。正在等团长提取。",
       fundedOther: "这个团已经满员了。",
       noClaim: "你在这个团购里没有可取回的 SOL。",

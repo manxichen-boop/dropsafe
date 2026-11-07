@@ -50,15 +50,15 @@ A 点 **Withdraw 0.14 SOL (70%)**。切到 B,点 **I got my goods. Release 0.03 
 
 ### 1:45–2:00 收尾
 
-> "To be clear about the limits: an organizer who runs off after withdrawing still keeps the 70%, so we cap the damage rather than remove it. Next up are organizer deposits and dispute handling. DropSafe: no target, no payout. Live on Solana Devnet. Thanks!"
+> "To be clear about the limits: an organizer who runs off after withdrawing still keeps the 70%, so we cap the damage rather than remove it. Next up are organizer deposits to cover that 70%, and dispute handling. DropSafe: no target, no payout. Live on Solana Devnet. Thanks!"
 
 ## 评委可能问的问题
 
-**为什么钱是安全的?** Escrow 是 PDA:由程序地址和种子推导出来,没有私钥,只有程序按规则才能转出。
+**钱放在哪里,谁能动?** Escrow 是 PDA:由程序地址和种子推导出来,没有私钥,只有程序的指令才能转出。但程序目前可以升级,持有升级权限的部署钱包可以改规则,这是原型阶段的局限。
 
 **怎么防止重复参与和重复退款?** Contribution PDA 只能 `init` 一次,所以不能重复参与。退款时关闭这个账户,所以不能重复退款。
 
-**团长达标后拿钱跑路怎么办?** 他最多卷走 70%,剩下 30% 买家可以在发货期限后取回。这是限制损失,不是彻底解决,下一步是团长保证金。
+**团长达标后拿钱跑路怎么办?** 他最多卷走 70%,剩下 30% 买家可以在发货期限后取回。这是限制损失,不是彻底解决。下一步是团长保证金,用来覆盖这 70% 的风险。
 
 **买家收到货还谎称没收到怎么办?** 他能拿回 30%,目前没有仲裁,这是当前版本的局限。
 
