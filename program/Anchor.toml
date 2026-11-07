@@ -8,6 +8,9 @@ skip-lint = false
 [programs.localnet]
 dropsafe = "6KcTuoAX6u5SRdX563VhbrXWiBrMwAfGxST5ud9RaQgX"
 
+[programs.devnet]
+dropsafe = "6KcTuoAX6u5SRdX563VhbrXWiBrMwAfGxST5ud9RaQgX"
+
 [provider]
 cluster = "localnet"
 wallet = "~/.config/solana/id.json"
