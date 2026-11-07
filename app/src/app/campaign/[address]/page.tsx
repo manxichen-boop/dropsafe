@@ -212,7 +212,7 @@ export default function CampaignPage({
   if (!campaign || !campaignKey || !escrowKey) {
     return (
       <div className="flex flex-col items-center py-12 text-center">
-        <Lockie mood="sleeping" size={140} decorative />
+        <Lockie mood="sleeping" size={180} decorative />
         <p className="mt-2 text-muted">{t.detail.notFound}</p>
         <Link href="/" className="mt-2 font-semibold underline underline-offset-4">
           {t.detail.backHome}
@@ -436,7 +436,7 @@ export default function CampaignPage({
         <aside className="order-2 space-y-3 md:sticky md:top-4">
           <div className="card p-5">
             <div className="flex items-center gap-3">
-              <Lockie mood={MOOD[status]} size={88} className="shrink-0" />
+              <Lockie mood={MOOD[status]} size={112} className="shrink-0" />
               <p className="text-sm leading-relaxed">{t.detail.explain[status]}</p>
             </div>
 

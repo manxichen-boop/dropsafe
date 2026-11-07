@@ -19,7 +19,7 @@ export function SuccessNotice({ title, signature }: { title: string; signature?:
   return (
     <div role="status" className="card flex items-center gap-3 p-4">
       <div className="relative shrink-0">
-        <Lockie mood="celebrating" size={72} decorative />
+        <Lockie mood="celebrating" size={88} decorative />
         {COINS.map((coin, i) => (
           <svg
             key={i}

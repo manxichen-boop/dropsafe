@@ -77,16 +77,16 @@ export default function HomePage() {
 
   return (
     <>
-      <section className="grid items-center gap-6 md:grid-cols-[1.4fr_1fr]">
+      <section className="grid items-center gap-6 md:grid-cols-[1.6fr_1fr]">
         <div>
-          <h1 className="font-display text-4xl font-semibold leading-[1.1] md:text-6xl">{t.home.title}</h1>
+          <h1 className="font-display text-4xl font-semibold leading-[1.1] [text-wrap:balance] md:text-6xl">{t.home.title}</h1>
           <p className="mt-4 max-w-xl text-lg leading-relaxed">{t.home.subtitle}</p>
           <Link href="/create" className="btn-primary mt-6 inline-block px-6 py-3 text-lg">
             {t.home.newCampaign}
           </Link>
         </div>
         <div className="flex justify-center">
-          <Lockie mood="guarding" size={280} label={t.home.mascotAlt} className="h-auto w-48 md:w-72" />
+          <Lockie mood="guarding" size={420} label={t.home.mascotAlt} className="w-64 md:w-[22rem]" />
         </div>
       </section>
 
@@ -108,7 +108,7 @@ export default function HomePage() {
         {!failed && rows === null && <p className="py-12 text-center text-muted">{t.home.loading}</p>}
         {rows?.length === 0 && !failed && (
           <div className="flex flex-col items-center py-10 text-center">
-            <Lockie mood="sleeping" size={140} decorative />
+            <Lockie mood="sleeping" size={180} decorative />
             <p className="mt-2 text-muted">{t.home.empty}</p>
             <Link href="/create" className="mt-2 font-semibold underline underline-offset-4">
               {t.home.emptyCta}

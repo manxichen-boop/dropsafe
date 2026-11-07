@@ -20,7 +20,7 @@ export function ProductImage({ meta, title, large = false }: { meta: CampaignMet
         <img src={src} alt={title} className="h-full w-full object-cover" onError={() => setBroken(true)} />
       ) : (
         <div className="flex h-full w-full items-center justify-center bg-sun-tint">
-          <Lockie mood="guarding" size={large ? 180 : 104} decorative />
+          <Lockie mood="guarding" size={large ? 260 : 136} decorative />
         </div>
       )}
     </div>

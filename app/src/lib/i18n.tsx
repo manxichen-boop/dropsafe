@@ -16,7 +16,7 @@ const en = {
     "no-wallet": "Connect wallet",
   },
   home: {
-    title: "Group buys with the money held on-chain until it's earned.",
+    title: "Group buys with the money held on\u2060-\u2060chain until it's earned.",
     subtitle:
       "Your SOL goes into an escrow account with no private key. If the group doesn't fill by the deadline, every buyer takes their full share back. If it fills, the organizer receives 70% to place the order, and the last 30% stays in escrow until buyers confirm delivery or the dispute window closes.",
     mascotAlt: "Lockie, a round orange coin jar, hugging a coin",

@@ -25,12 +25,12 @@ export function StoryLine() {
 
       <div className="mt-6 flex items-start justify-between gap-1 sm:gap-4">
         <div className="flex min-w-0 flex-1 flex-col items-center">
-          <Lockie mood="waiting" size={96} decorative />
+          <Lockie mood="waiting" size={128} decorative />
           <p className={stepText}>{t.home.story1}</p>
         </div>
         <Arrow />
         <div className="flex min-w-0 flex-1 flex-col items-center">
-          <div className="flex h-24 items-center">
+          <div className="flex h-32 items-center">
             <div className="w-[88px] sm:w-[112px]">
               <SeatBuddies campaign="story" target={6} joined={6} buyers={[]} label={t.home.story2} />
             </div>
@@ -39,7 +39,7 @@ export function StoryLine() {
         </div>
         <Arrow />
         <div className="flex min-w-0 flex-1 flex-col items-center">
-          <Lockie mood="paying" size={96} decorative />
+          <Lockie mood="paying" size={128} decorative />
           <p className={stepText}>{t.home.story3}</p>
         </div>
       </div>
@@ -52,7 +52,7 @@ export function StoryLine() {
         </svg>
         <p className="text-center text-sm font-semibold text-danger-ink">{t.home.storyBranch}</p>
         <div className="mt-2 flex items-center gap-3">
-          <Lockie mood="refunding" size={96} decorative />
+          <Lockie mood="refunding" size={128} decorative />
           <p className="max-w-48 text-sm font-medium">{t.home.storyRefund}</p>
         </div>
       </div>

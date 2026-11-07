@@ -12,12 +12,8 @@ const frame = (size: number, className?: string) => ({
 
 export function JarIcon({ size = 24, className }: IconProps) {
   return (
-    <svg {...frame(size, className)}>
-      <ellipse cx={24} cy={26} rx={19} ry={18} fill="#FF6B3D" />
-      <ellipse cx={24} cy={38} rx={17} ry={7} fill="#E3552A" />
-      <ellipse cx={18} cy={15} rx={8} ry={4} fill="#FFBCA6" />
-      <rect x={15} y={22} width={18} height={5} rx={2.5} fill="#3D1A0C" />
-    </svg>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img src="/lockie/logo.webp" width={size} height={size} alt="" aria-hidden className={className} />
   );
 }
 
@@ -57,14 +53,11 @@ export function CalendarIcon({ size = 24, className }: IconProps) {
 
 export function PeopleIcon({ size = 24, className }: IconProps) {
   return (
-    <svg {...frame(size, className)}>
-      <ellipse cx={33} cy={27} rx={11} ry={13} fill="#D69A12" />
-      <ellipse cx={33} cy={25} rx={11} ry={13} fill="#FFC93C" />
-      <ellipse cx={18} cy={30} rx={14} ry={15} fill="#E3552A" />
-      <ellipse cx={18} cy={28} rx={14} ry={15} fill="#FF6B3D" />
-      <circle cx={13} cy={25} r={2.4} fill="#1F1D1A" />
-      <circle cx={23} cy={25} r={2.4} fill="#1F1D1A" />
-      <path d="M14 32 Q18 36 22 32" fill="none" stroke="#1F1D1A" strokeWidth={2} strokeLinecap="round" />
-    </svg>
+    <span className={`relative inline-block shrink-0 ${className ?? ""}`} style={{ width: size, height: size }} aria-hidden>
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/lockie/seat-1.webp" width={size * 0.72} height={size * 0.72} alt="" className="absolute right-0 top-0" />
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src="/lockie/seat-0.webp" width={size * 0.8} height={size * 0.8} alt="" className="absolute bottom-0 left-0" />
+    </span>
   );
 }
