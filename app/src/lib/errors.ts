@@ -55,8 +55,12 @@ export function translateError(error: unknown): FriendlyError {
   if (/already been processed/i.test(text)) {
     return { zh: "这笔交易已经提交过了,请刷新页面查看。", en: "This transaction was already submitted. Refresh to check the result." };
   }
+  // 交易的 blockhash 只有约 60–90 秒有效,在钱包里停留太久就会过期
   if (/blockhash|expired|timeout/i.test(text)) {
-    return { zh: "网络繁忙,交易超时,请重试。", en: "The network is busy and the transaction timed out. Please try again." };
+    return {
+      zh: "交易已过期,没有扣款。请重试,并在钱包弹窗出现后尽快确认。",
+      en: "The transaction expired and nothing was charged. Please try again and approve it promptly in your wallet.",
+    };
   }
   if (/WalletNotConnected|Wallet not connected/i.test(text)) {
     return { zh: "请先连接钱包。", en: "Please connect your wallet first." };
