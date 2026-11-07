@@ -112,7 +112,11 @@ export function OSProvider({ children }: { children: ReactNode }) {
   const [filter, setFilter] = useState<TierName | "all">("all");
   const [dialog, setDialog] = useState<DialogState | null>(null);
   const windowsRef = useRef(windows);
-  windowsRef.current = windows;
+  // 同步更新引用:连着调用 close 和 open 时,第二步要看到第一步的结果
+  const commit = useCallback((next: OSWindow[]) => {
+    windowsRef.current = next;
+    setWindows(next);
+  }, []);
 
   const syncUrl = useCallback((list: OSWindow[], push = false) => {
     const url = urlOf(list[list.length - 1]);
@@ -127,10 +131,10 @@ export function OSProvider({ children }: { children: ReactNode }) {
       const win = list.find((w) => w.id === id);
       if (!win || list[list.length - 1].id === id) return;
       const next = [...list.filter((w) => w.id !== id), win];
-      setWindows(next);
+      commit(next);
       syncUrl(next);
     },
-    [syncUrl]
+    [commit, syncUrl]
   );
 
   const open = useCallback(
@@ -143,13 +147,14 @@ export function OSProvider({ children }: { children: ReactNode }) {
       }
       // 新窗口在上一个窗口的位置向右下偏移 24px
       const last = list[list.length - 1];
-      const start = last ? { x: last.x + 24, y: last.y + 24 } : { x: 124, y: 16 };
+      // 第一个窗口放在两列图标的右边,图标多到换列时也不会被挡住
+      const start = last ? { x: last.x + 24, y: last.y + 24 } : { x: 212, y: 16 };
       const pos = savedPosition(id) ?? start;
       const next = [...list, { id, kind, param, x: pos.x, y: pos.y, opener }];
-      setWindows(next);
+      commit(next);
       syncUrl(next, true);
     },
-    [focus, syncUrl]
+    [commit, focus, syncUrl]
   );
 
   const close = useCallback(
@@ -157,17 +162,17 @@ export function OSProvider({ children }: { children: ReactNode }) {
       const list = windowsRef.current;
       const win = list.find((w) => w.id === id);
       const next = list.filter((w) => w.id !== id);
-      setWindows(next);
+      commit(next);
       syncUrl(next);
       // 关闭后焦点回到打开它的图标
       if (win?.opener?.isConnected) win.opener.focus();
     },
-    [syncUrl]
+    [commit, syncUrl]
   );
 
   const move = useCallback((id: string, x: number, y: number) => {
-    setWindows((list) => list.map((w) => (w.id === id ? { ...w, x, y } : w)));
-  }, []);
+    commit(windowsRef.current.map((w) => (w.id === id ? { ...w, x, y } : w)));
+  }, [commit]);
 
   const commitPosition = useCallback((id: string) => {
     const win = windowsRef.current.find((w) => w.id === id);

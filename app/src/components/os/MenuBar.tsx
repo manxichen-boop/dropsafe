@@ -91,8 +91,17 @@ export function MenuBar() {
   }, [openKey]);
 
   const triggers = () => [...(bar.current?.querySelectorAll<HTMLElement>("[data-menu-trigger]") ?? [])].filter((el) => el.offsetParent !== null);
-  const focusFirstItem = (key: string) =>
-    requestAnimationFrame(() => bar.current?.querySelector<HTMLElement>(`[data-menu="${key}"] [role=menuitem]`)?.focus());
+  // 用键盘打开菜单时,等菜单渲染出来再把焦点移到第一项
+  const focusAfterOpen = useRef<string | null>(null);
+  const focusFirstItem = (key: string) => {
+    focusAfterOpen.current = key;
+  };
+  useEffect(() => {
+    const key = focusAfterOpen.current;
+    if (!key || key !== openKey) return;
+    focusAfterOpen.current = null;
+    bar.current?.querySelector<HTMLElement>(`[data-menu="${key}"] [role=menuitem]`)?.focus();
+  }, [openKey]);
 
   const onTriggerKey = (e: React.KeyboardEvent, key: string) => {
     const list = triggers();

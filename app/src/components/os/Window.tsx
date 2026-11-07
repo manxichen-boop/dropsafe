@@ -72,7 +72,13 @@ export function Window({
       tabIndex={-1}
       data-active={active}
       className="os-window"
-      style={{ left: win.x, top: win.y, width, zIndex: z }}
+      // 不管记住的位置在哪,窗口都不会超出桌面右边和下边
+      style={{
+        left: `max(0px, min(${win.x}px, calc(100% - ${width + 12}px)))`,
+        top: `max(0px, min(${win.y}px, calc(100% - 120px)))`,
+        width,
+        zIndex: z,
+      }}
       onPointerDownCapture={() => focus(win.id)}
     >
       <div className="os-titlebar" onPointerDown={onPointerDown} onPointerMove={onPointerMove} onPointerUp={onPointerUp} onPointerCancel={onPointerUp}>

@@ -32,6 +32,8 @@ body {
   outline-offset: 2px;
 }
 
+/* 组件样式放在 components 层,Tailwind 工具类可以覆盖它们 */
+@layer components {
 /* 屏幕:四周留外框 */
 .os-screen {
   position: fixed;
@@ -249,6 +251,8 @@ body {
   background: var(--color-tomato);
   color: var(--color-ink);
   outline: 1px dashed var(--color-ink);
+}
+
 }
 
 /* 两帧逐帧动画 */

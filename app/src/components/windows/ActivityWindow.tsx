@@ -31,6 +31,8 @@ export function ActivityWindow() {
       try {
         const connection = program.provider.connection;
         const signatures = await chainRead("activity", () => connection.getSignaturesForAddress(PROGRAM_ID, { limit: LIMIT }, "confirmed"));
+        // 创建活动时,托管账户的余额变化里包含了它自己的租金,要扣掉才是保证金
+        const escrowRent = await connection.getMinimumBalanceForRentExemption(9);
         const list: Entry[] = [];
         // 排队一条条读,避免触发公共 RPC 限流
         for (const { signature, err, blockTime } of signatures) {
@@ -61,6 +63,7 @@ export function ActivityWindow() {
               if (position >= 0) {
                 const index = indexes[position];
                 lamports = Math.abs(tx.meta.postBalances[index] - tx.meta.preBalances[index]);
+                if (action === "createCampaign") lamports = Math.max(0, lamports - escrowRent);
               }
             }
           } catch {
