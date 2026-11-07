@@ -1,20 +1,22 @@
-use anchor_lang::prelude::*;
+use anchor_lang::{
+    prelude::*,
+    system_program::{transfer, Transfer},
+};
 
 use crate::{
     constants::*,
     error::ErrorCode,
-    state::{Campaign, CampaignStatus, Escrow},
+    state::*,
 };
 
 #[derive(Accounts)]
 #[instruction(campaign_id: u64)]
 pub struct CreateCampaign<'info> {
-    /// 团长:必须签名,并支付两个新账户的租金
+    /// 团长:必须签名,支付租金;全额保障档还要存入保证金
     #[account(mut)]
     pub organizer: Signer<'info>,
 
-    /// 活动账户:地址由 "campaign" + 团长地址 + 活动编号推导,
-    /// 所以同一团长不能用同一编号创建两次
+    /// 活动账户:地址由团长和活动编号推导,同一编号不能创建两次
     #[account(
         init,
         payer = organizer,
@@ -22,9 +24,9 @@ pub struct CreateCampaign<'info> {
         seeds = [CAMPAIGN_SEED, organizer.key().as_ref(), &campaign_id.to_le_bytes()],
         bump
     )]
-    pub campaign: Account<'info, Campaign>,
+    pub campaign: Box<Account<'info, Campaign>>,
 
-    /// 托管金库:地址由 "escrow" + 活动地址推导,一个活动对应一个金库
+    /// 托管金库,一个活动对应一个
     #[account(
         init,
         payer = organizer,
@@ -34,61 +36,119 @@ pub struct CreateCampaign<'info> {
     )]
     pub escrow: Account<'info, Escrow>,
 
-    /// Solana 系统程序:创建账户时需要
+    /// 团长记录:第一次创建活动时初始化
+    #[account(
+        init_if_needed,
+        payer = organizer,
+        space = 8 + OrganizerStats::INIT_SPACE,
+        seeds = [ORGANIZER_SEED, organizer.key().as_ref()],
+        bump
+    )]
+    pub organizer_stats: Box<Account<'info, OrganizerStats>>,
+
     pub system_program: Program<'info, System>,
 }
 
+#[allow(clippy::too_many_arguments)]
 pub fn handle_create_campaign(
     ctx: Context<CreateCampaign>,
     campaign_id: u64,
     title: String,
-    price_per_person_lamports: u64,
+    description: String,
+    image_url: String,
+    price: u64,
     target_count: u32,
-    deadline_unix_ts: i64,
-    delivery_deadline_unix_ts: i64,
-    dispute_deadline_unix_ts: i64,
+    deadline: i64,
+    delivery_deadline: i64,
+    tier: Tier,
 ) -> Result<()> {
-    // 校验:名称不超过 50 个字符(按字符数,不是字节数,中文也能写满 50 个字)
+    let now = Clock::get()?.unix_timestamp;
+
+    // 校验:文本长度。同时限制字符数和字节数,防止超过账户空间
     require!(
-        title.chars().count() <= MAX_TITLE_CHARS,
+        title.chars().count() <= MAX_TITLE_CHARS && title.len() <= MAX_TITLE_BYTES,
         ErrorCode::TitleTooLong
     );
-    // 校验:每人金额必须大于 0
-    require!(price_per_person_lamports > 0, ErrorCode::InvalidPrice);
-    // 校验:目标人数必须大于 0
-    require!(target_count > 0, ErrorCode::InvalidTargetCount);
-    // 校验:截止时间必须在未来(以链上时钟为准,不能信任用户的电脑时间)
     require!(
-        deadline_unix_ts > Clock::get()?.unix_timestamp,
-        ErrorCode::DeadlineNotInFuture
+        description.chars().count() <= MAX_DESCRIPTION_CHARS
+            && description.len() <= MAX_DESCRIPTION_BYTES,
+        ErrorCode::DescriptionTooLong
     );
-    // 校验:发货期限必须晚于募集截止时间
     require!(
-        delivery_deadline_unix_ts > deadline_unix_ts,
+        image_url.len() <= MAX_IMAGE_URL_BYTES,
+        ErrorCode::ImageUrlTooLong
+    );
+    require!(price > 0, ErrorCode::InvalidPrice);
+    require!(target_count > 0, ErrorCode::InvalidTargetCount);
+
+    // 校验:募集期在未来,且不超过 90 天
+    require!(deadline > now, ErrorCode::DeadlineNotInFuture);
+    let longest_deadline = now
+        .checked_add(MAX_FUNDRAISING_SECONDS)
+        .ok_or(ErrorCode::MathOverflow)?;
+    require!(deadline <= longest_deadline, ErrorCode::FundraisingTooLong);
+
+    // 校验:发货期限在募集截止之后,且不超过 365 天
+    require!(
+        delivery_deadline > deadline,
         ErrorCode::InvalidDeliveryDeadline
     );
-    // 校验:申诉截止时间必须晚于发货期限,买家才有时间报告"未收到"
+    let longest_delivery = deadline
+        .checked_add(MAX_DELIVERY_SECONDS)
+        .ok_or(ErrorCode::MathOverflow)?;
     require!(
-        dispute_deadline_unix_ts > delivery_deadline_unix_ts,
-        ErrorCode::InvalidDisputeDeadline
+        delivery_deadline <= longest_delivery,
+        ErrorCode::DeliveryTooLong
     );
+    let appeal_end = delivery_deadline
+        .checked_add(APPEAL_WINDOW_SECONDS)
+        .ok_or(ErrorCode::MathOverflow)?;
+
+    // 全额保障档:保证金 = 预付款 * 目标人数,每个名额对应自己的预付款
+    let bond_total = match tier {
+        Tier::Shielded => upfront_of(price)?
+            .checked_mul(target_count as u64)
+            .ok_or(ErrorCode::MathOverflow)?,
+        _ => 0,
+    };
+    if bond_total > 0 {
+        transfer(
+            CpiContext::new(
+                ctx.accounts.system_program.key(),
+                Transfer {
+                    from: ctx.accounts.organizer.to_account_info(),
+                    to: ctx.accounts.escrow.to_account_info(),
+                },
+            ),
+            bond_total,
+        )?;
+    }
 
     ctx.accounts.campaign.set_inner(Campaign {
         organizer: ctx.accounts.organizer.key(),
         campaign_id,
         title,
-        price_per_person_lamports,
+        description,
+        image_url,
+        price,
         target_count,
-        contributor_count: 0,
-        deadline_unix_ts,
-        delivery_deadline_unix_ts,
-        dispute_deadline_unix_ts,
-        settled_count: 0,
+        joined_count: 0,
+        deadline,
+        delivery_deadline,
+        appeal_end,
+        tier,
         status: CampaignStatus::Fundraising,
+        upfront_released: false,
+        bond_total,
+        bond_reclaimed: false,
+        seats_resolved: 0,
+        finalized: false,
         bump: ctx.bumps.campaign,
-        escrow_bump: ctx.bumps.escrow,
     });
     ctx.accounts.escrow.bump = ctx.bumps.escrow;
 
-    Ok(())
+    let stats = &mut ctx.accounts.organizer_stats;
+    stats.organizer = ctx.accounts.organizer.key();
+    stats.bump = ctx.bumps.organizer_stats;
+    increment(&mut stats.campaigns_created)
 }

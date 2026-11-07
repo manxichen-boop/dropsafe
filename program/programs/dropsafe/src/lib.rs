@@ -1,11 +1,9 @@
-//! DropSafe:Solana 链上团购托管协议。
+//! DropSafe v2:Solana 链上团购托管协议。
 //!
-//! 买家的钱存进程序控制的托管账户(PDA),团长不能直接拿走:
-//! - 截止时没达标 → 买家自己取回(refund)
-//! - 达标后 → 团长先提取 70% 首款去下单(release),30% 尾款留在托管里
-//! - 买家确认收货 → 他那份尾款给团长(confirm_delivery)
-//! - 过了发货期限买家报告未收到 → 他那份尾款退回(claim_undelivered)
-//! - 申诉期过后没有异议 → 团长领取尾款(claim_unconfirmed)
+//! 买家的钱和团长的保证金都存进没有私钥的托管账户,按三档规则结算:
+//! - 全额保障(Shielded):团长先存保证金,团长不发货时买家拿回全额
+//! - 部分保障(Standard):团长先拿 70%,不发货时买家拿回 30%
+//! - 信任团(Trust):成团后团长拿 100%,买家的报告只留下记录
 
 pub mod constants;
 pub mod error;
@@ -18,62 +16,87 @@ pub use constants::*;
 pub use instructions::*;
 pub use state::*;
 
-declare_id!("6Sno3DHv8uPp9aER9hhdToEnKFLHZwzJZjMNX5GnDj8u");
+declare_id!("HPuN91VgkVKQ5kNRS79Q6kci1XJYBV9ux9fhQsQubxV2");
 
 #[program]
 pub mod dropsafe {
     use super::*;
 
-    /// 团长创建一个团购活动和它的托管金库
+    /// 团长创建活动;全额保障档同时存入保证金
+    #[allow(clippy::too_many_arguments)]
     pub fn create_campaign(
         ctx: Context<CreateCampaign>,
         campaign_id: u64,
         title: String,
-        price_per_person_lamports: u64,
+        description: String,
+        image_url: String,
+        price: u64,
         target_count: u32,
-        deadline_unix_ts: i64,
-        delivery_deadline_unix_ts: i64,
-        dispute_deadline_unix_ts: i64,
+        deadline: i64,
+        delivery_deadline: i64,
+        tier: Tier,
     ) -> Result<()> {
         crate::instructions::create_campaign::handle_create_campaign(
             ctx,
             campaign_id,
             title,
-            price_per_person_lamports,
+            description,
+            image_url,
+            price,
             target_count,
-            deadline_unix_ts,
-            delivery_deadline_unix_ts,
-            dispute_deadline_unix_ts,
+            deadline,
+            delivery_deadline,
+            tier,
         )
     }
 
-    /// 买家参与:把每人金额转入托管金库
+    /// 买家付款参与
     pub fn contribute(ctx: Context<Contribute>) -> Result<()> {
         crate::instructions::contribute::handle_contribute(ctx)
     }
 
-    /// 未达标且已过截止时间:买家取回自己的钱
+    /// 成团前买家退出,全额退回
+    pub fn withdraw_before_fill(ctx: Context<WithdrawBeforeFill>) -> Result<()> {
+        crate::instructions::withdraw_before_fill::handle_withdraw_before_fill(ctx)
+    }
+
+    /// 成团前团长取消
+    pub fn cancel_campaign(ctx: Context<CancelCampaign>) -> Result<()> {
+        crate::instructions::cancel_campaign::handle_cancel_campaign(ctx)
+    }
+
+    /// 买家全额取回:未成团、团长放弃、活动已取消
     pub fn refund(ctx: Context<Refund>) -> Result<()> {
         crate::instructions::refund::handle_refund(ctx)
     }
 
-    /// 达标后:团长提取 70% 首款
-    pub fn release(ctx: Context<Release>) -> Result<()> {
-        crate::instructions::release::handle_release(ctx)
+    /// 团长取回保证金:活动失败、放弃或取消后
+    pub fn reclaim_bond(ctx: Context<ReclaimBond>) -> Result<()> {
+        crate::instructions::reclaim_bond::handle_reclaim_bond(ctx)
     }
 
-    /// 买家确认收货:他那份尾款转给团长
+    /// 团长提取预付款,按档位转出
+    pub fn release_upfront(ctx: Context<ReleaseUpfront>) -> Result<()> {
+        crate::instructions::release_upfront::handle_release_upfront(ctx)
+    }
+
+    /// 买家确认收货
     pub fn confirm_delivery(ctx: Context<ConfirmDelivery>) -> Result<()> {
         crate::instructions::confirm_delivery::handle_confirm_delivery(ctx)
     }
 
-    /// 过了发货期限,买家报告未收到:取回尾款;如果团长从未提取,取回全款
-    pub fn claim_undelivered(ctx: Context<ClaimUndelivered>) -> Result<()> {
-        crate::instructions::claim_undelivered::handle_claim_undelivered(ctx)
+    /// 买家在申诉期内报告未收到
+    pub fn report_not_received(ctx: Context<ReportNotReceived>) -> Result<()> {
+        crate::instructions::report_not_received::handle_report_not_received(ctx)
     }
 
-    /// 申诉期结束后,团长领取某位买家没有异议的尾款
-    pub fn claim_unconfirmed(ctx: Context<ClaimUnconfirmed>) -> Result<()> {
-        crate::instructions::claim_unconfirmed::handle_claim_unconfirmed(ctx)
+    /// 结算一个名额,任何人都可以调用
+    pub fn settle_seat(ctx: Context<SettleSeat>) -> Result<()> {
+        crate::instructions::settle_seat::handle_settle_seat(ctx)
+    }
+
+    /// 记录活动的最终结果,任何人都可以调用,只能一次
+    pub fn finalize_campaign(ctx: Context<FinalizeCampaign>) -> Result<()> {
+        crate::instructions::finalize_campaign::handle_finalize_campaign(ctx)
     }
 }

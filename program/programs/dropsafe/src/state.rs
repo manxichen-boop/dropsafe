@@ -1,109 +1,201 @@
 use anchor_lang::prelude::*;
 
 use crate::{
-    constants::{BPS_DENOMINATOR, MAX_TITLE_BYTES, UPFRONT_BPS},
+    constants::*,
     error::ErrorCode,
 };
+
+/// 保障档位,创建后不可修改
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, InitSpace)]
+pub enum Tier {
+    /// 全额保障:团长先存保证金,买家报告未收到时拿回全额
+    Shielded,
+    /// 部分保障:没有保证金,买家报告未收到时拿回 30%
+    Standard,
+    /// 信任团:成团后团长拿走 100%,买家报告只留下记录
+    Trust,
+}
 
 /// 活动状态
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, InitSpace)]
 pub enum CampaignStatus {
-    /// 募集中(也包括"已满员、等待团长提取首款"的阶段)
+    /// 募集中
     Fundraising,
-    /// 未达标且已有人发起退款
+    /// 已满员,等团长提取预付款
+    Funded,
+    /// 团长已提取预付款,等待交付
+    Active,
+    /// 截止时没凑满
     Failed,
-    /// 团长已提取 70% 首款,剩下 30% 尾款留在托管里,等待买家收货
-    Delivering,
-    /// 所有买家的尾款都已结算
-    Completed,
+    /// 成团后团长在发货期限前没有提取
+    Abandoned,
+    /// 团长在成团前取消
+    Cancelled,
+    /// 所有名额已结算
+    Closed,
 }
 
-/// 一次团购活动。任何人都能读取,只有本程序能修改。
+/// 名额状态
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, PartialEq, Eq, InitSpace)]
+pub enum ContributionStatus {
+    Paid,
+    Confirmed,
+    Reported,
+}
+
+/// 一次团购活动
 #[account]
 #[derive(InitSpace)]
 pub struct Campaign {
-    /// 团长的钱包地址
     pub organizer: Pubkey,
-    /// 团长自选的活动编号,用来区分同一团长的多个活动
     pub campaign_id: u64,
-    /// 活动名称
     #[max_len(MAX_TITLE_BYTES)]
     pub title: String,
-    /// 每人需要支付的金额(单位 lamports,1 SOL = 10 亿 lamports)
-    pub price_per_person_lamports: u64,
-    /// 目标人数,达到后团长才能提取
+    #[max_len(MAX_DESCRIPTION_BYTES)]
+    pub description: String,
+    #[max_len(MAX_IMAGE_URL_BYTES)]
+    pub image_url: String,
+    /// 每人金额(lamports)
+    pub price: u64,
     pub target_count: u32,
-    /// 当前参与人数。退款时不减少,这样已失败的活动不可能"变回"达标
-    pub contributor_count: u32,
-    /// 截止时间(Unix 时间戳,单位秒)
-    pub deadline_unix_ts: i64,
-    /// 发货期限:团长必须在此之前提取首款并发货。
-    /// 过了这个时间,买家可以报告"未收到"取回尾款
-    pub delivery_deadline_unix_ts: i64,
-    /// 申诉截止时间:过了这个时间,没有异议的尾款才能由团长领取
-    pub dispute_deadline_unix_ts: i64,
-    /// 已结算尾款的买家人数,全部结算后活动变为 Completed
-    pub settled_count: u32,
-    /// 活动状态
+    pub joined_count: u32,
+    /// 募集截止时间
+    pub deadline: i64,
+    /// 发货期限
+    pub delivery_deadline: i64,
+    /// 申诉截止时间 = delivery_deadline + APPEAL_WINDOW,创建时算好存下来
+    pub appeal_end: i64,
+    pub tier: Tier,
     pub status: CampaignStatus,
-    /// Campaign PDA 的 bump,之后校验地址时不用重新计算
+    pub upfront_released: bool,
+    /// 创建时存入的保证金总额
+    pub bond_total: u64,
+    pub bond_reclaimed: bool,
+    /// 已结算的名额数
+    pub seats_resolved: u32,
+    pub finalized: bool,
     pub bump: u8,
-    /// Escrow PDA 的 bump
-    pub escrow_bump: u8,
 }
 
-/// 托管金库:买家的 SOL 存放在这个账户的余额里。
-/// 它归本程序所有,没有私钥,团长也无法直接转走,只有程序按规则才能动用。
+impl Campaign {
+    /// 预付款 = price * 7 / 10
+    pub fn upfront(&self) -> Result<u64> {
+        upfront_of(self.price)
+    }
+
+    /// 尾款 = price - upfront,两者相加严格等于 price
+    pub fn remainder(&self) -> Result<u64> {
+        Ok(self
+            .price
+            .checked_sub(self.upfront()?)
+            .ok_or(ErrorCode::MathOverflow)?)
+    }
+}
+
+pub fn upfront_of(price: u64) -> Result<u64> {
+    let value = (price as u128)
+        .checked_mul(UPFRONT_NUMERATOR as u128)
+        .ok_or(ErrorCode::MathOverflow)?
+        / UPFRONT_DENOMINATOR as u128;
+    Ok(u64::try_from(value).map_err(|_| ErrorCode::MathOverflow)?)
+}
+
+/// 托管金库:存放买家付款和团长保证金。它归本程序所有,没有私钥。
 #[account]
 #[derive(InitSpace)]
 pub struct Escrow {
     pub bump: u8,
 }
 
-/// 买家的参与凭证。每个买家在每个活动里只有一个,既防止重复参与,也记录可退金额。
+/// 买家的名额凭证,结算、退款、退出时关闭,租金退还给买家
 #[account]
 #[derive(InitSpace)]
 pub struct Contribution {
-    /// 所属活动
-    pub campaign: Pubkey,
-    /// 买家钱包地址
     pub buyer: Pubkey,
-    /// 实际支付的金额,退款时按此金额退回
     pub amount: u64,
+    pub status: ContributionStatus,
     pub bump: u8,
 }
 
-impl Contribution {
-    /// 这份出资里留作尾款的金额。
-    /// 用总额减去首款,保证不会因为整数除法的取整少算一个 lamport
-    pub fn holdback(&self) -> Result<u64> {
-        Ok(self
-            .amount
-            .checked_sub(upfront_share(self.amount)?)
-            .ok_or(ErrorCode::MathOverflow)?)
-    }
+/// 团长在某一档位下的记录
+#[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Default, InitSpace)]
+pub struct TierStats {
+    pub funded: u64,
+    /// 买家主动确认的名额
+    pub seats_confirmed: u64,
+    /// 申诉期结束仍无回应的名额
+    pub seats_unconfirmed: u64,
+    /// 买家报告未收到的名额
+    pub seats_reported: u64,
 }
 
-/// 一份出资里可以先给团长的首款金额。
-/// 用 u128 做中间计算,防止相乘时溢出
-pub fn upfront_share(amount: u64) -> Result<u64> {
-    let share = (amount as u128)
-        .checked_mul(UPFRONT_BPS as u128)
-        .ok_or(ErrorCode::MathOverflow)?
-        / BPS_DENOMINATOR as u128;
-    Ok(share as u64)
+/// 团长的链上记录
+#[account]
+#[derive(InitSpace)]
+pub struct OrganizerStats {
+    pub organizer: Pubkey,
+    pub campaigns_created: u64,
+    pub campaigns_failed: u64,
+    pub campaigns_abandoned: u64,
+    pub campaigns_cancelled: u64,
+    pub shielded: TierStats,
+    pub standard: TierStats,
+    pub trust: TierStats,
+    /// 实际付给团长的金额,不含退还的保证金
+    pub total_paid_to_organizer_lamports: u64,
+    pub bump: u8,
 }
 
-impl Campaign {
-    /// 记录一位买家的尾款已结算;全部结算后活动变为 Completed
-    pub fn record_settlement(&mut self) -> Result<()> {
-        self.settled_count = self
-            .settled_count
-            .checked_add(1)
-            .ok_or(ErrorCode::MathOverflow)?;
-        if self.settled_count >= self.contributor_count {
-            self.status = CampaignStatus::Completed;
+impl OrganizerStats {
+    pub fn tier_mut(&mut self, tier: Tier) -> &mut TierStats {
+        match tier {
+            Tier::Shielded => &mut self.shielded,
+            Tier::Standard => &mut self.standard,
+            Tier::Trust => &mut self.trust,
         }
+    }
+
+    pub fn add_paid(&mut self, amount: u64) -> Result<()> {
+        self.total_paid_to_organizer_lamports = self
+            .total_paid_to_organizer_lamports
+            .checked_add(amount)
+            .ok_or(ErrorCode::MathOverflow)?;
         Ok(())
     }
+}
+
+/// 买家的链上记录
+#[account]
+#[derive(InitSpace)]
+pub struct BuyerStats {
+    pub buyer: Pubkey,
+    pub campaigns_joined: u64,
+    pub seats_confirmed: u64,
+    pub seats_reported: u64,
+    pub seats_refunded: u64,
+    pub bump: u8,
+}
+
+/// 计数加 1,溢出时报错
+pub fn increment(value: &mut u64) -> Result<()> {
+    *value = value.checked_add(1).ok_or(ErrorCode::MathOverflow)?;
+    Ok(())
+}
+
+/// 从托管金库转出。每次转出前都检查:扣掉租金后的余额够不够
+pub fn pay_from_escrow<'info>(
+    escrow: &Account<'info, Escrow>,
+    to: &AccountInfo<'info>,
+    amount: u64,
+) -> Result<()> {
+    let info = escrow.to_account_info();
+    let rent = Rent::get()?.minimum_balance(info.data_len());
+    let available = info
+        .lamports()
+        .checked_sub(rent)
+        .ok_or(ErrorCode::InsufficientEscrow)?;
+    require!(available >= amount, ErrorCode::InsufficientEscrow);
+    escrow.sub_lamports(amount)?;
+    to.add_lamports(amount)?;
+    Ok(())
 }

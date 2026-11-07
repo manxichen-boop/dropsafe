@@ -1,25 +1,37 @@
 use anchor_lang::prelude::*;
 
-/// Campaign PDA 的种子前缀
 #[constant]
 pub const CAMPAIGN_SEED: &[u8] = b"campaign";
-
-/// Escrow(托管金库)PDA 的种子前缀
 #[constant]
 pub const ESCROW_SEED: &[u8] = b"escrow";
-
-/// Contribution(买家参与凭证)PDA 的种子前缀
 #[constant]
 pub const CONTRIBUTION_SEED: &[u8] = b"contribution";
+#[constant]
+pub const ORGANIZER_SEED: &[u8] = b"organizer";
+#[constant]
+pub const BUYER_SEED: &[u8] = b"buyer";
 
-/// 活动名称最多 50 个字符(中文、英文都算 1 个字符)
+/// 文本长度上限。字符数限制给用户看,字节数限制决定账户占多大空间
 pub const MAX_TITLE_CHARS: usize = 50;
+pub const MAX_TITLE_BYTES: usize = 200;
+pub const MAX_DESCRIPTION_CHARS: usize = 280;
+pub const MAX_DESCRIPTION_BYTES: usize = 840;
+pub const MAX_IMAGE_URL_BYTES: usize = 200;
 
-/// 活动名称在账户里最多占用的字节数:UTF-8 一个字符最多 4 字节,50 × 4 = 200
-pub const MAX_TITLE_BYTES: usize = MAX_TITLE_CHARS * 4;
+/// 预付款比例:upfront = price * 7 / 10
+pub const UPFRONT_NUMERATOR: u64 = 7;
+pub const UPFRONT_DENOMINATOR: u64 = 10;
 
-/// 达标后团长可以先提取的比例(基点,7000 = 70%),用来下单采购
-pub const UPFRONT_BPS: u64 = 7000;
+const DAY: i64 = 86_400;
 
-/// 基点的分母
-pub const BPS_DENOMINATOR: u64 = 10_000;
+/// 募集期最长 90 天,防止团长把买家的钱锁到很久以后
+pub const MAX_FUNDRAISING_SECONDS: i64 = 90 * DAY;
+/// 发货期最长 365 天
+pub const MAX_DELIVERY_SECONDS: i64 = 365 * DAY;
+
+/// 申诉期由合约固定,团长无法缩短。默认 72 小时
+#[cfg(not(feature = "devnet-demo"))]
+pub const APPEAL_WINDOW_SECONDS: i64 = 72 * 3_600;
+/// devnet-demo 构建下只有 60 秒,方便录视频和跑测试
+#[cfg(feature = "devnet-demo")]
+pub const APPEAL_WINDOW_SECONDS: i64 = 60;

@@ -6,10 +6,10 @@ resolution = true
 skip-lint = false
 
 [programs.devnet]
-dropsafe = "6Sno3DHv8uPp9aER9hhdToEnKFLHZwzJZjMNX5GnDj8u"
+dropsafe = "HPuN91VgkVKQ5kNRS79Q6kci1XJYBV9ux9fhQsQubxV2"
 
 [programs.localnet]
-dropsafe = "6Sno3DHv8uPp9aER9hhdToEnKFLHZwzJZjMNX5GnDj8u"
+dropsafe = "HPuN91VgkVKQ5kNRS79Q6kci1XJYBV9ux9fhQsQubxV2"
 
 [provider]
 cluster = "localnet"
