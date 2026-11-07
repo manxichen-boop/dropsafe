@@ -45,6 +45,8 @@ pub fn handle_create_campaign(
     price_per_person_lamports: u64,
     target_count: u32,
     deadline_unix_ts: i64,
+    delivery_deadline_unix_ts: i64,
+    dispute_deadline_unix_ts: i64,
 ) -> Result<()> {
     // 校验:名称不超过 50 个字符(按字符数,不是字节数,中文也能写满 50 个字)
     require!(
@@ -60,6 +62,16 @@ pub fn handle_create_campaign(
         deadline_unix_ts > Clock::get()?.unix_timestamp,
         ErrorCode::DeadlineNotInFuture
     );
+    // 校验:发货期限必须晚于募集截止时间
+    require!(
+        delivery_deadline_unix_ts > deadline_unix_ts,
+        ErrorCode::InvalidDeliveryDeadline
+    );
+    // 校验:申诉截止时间必须晚于发货期限,买家才有时间报告"未收到"
+    require!(
+        dispute_deadline_unix_ts > delivery_deadline_unix_ts,
+        ErrorCode::InvalidDisputeDeadline
+    );
 
     ctx.accounts.campaign.set_inner(Campaign {
         organizer: ctx.accounts.organizer.key(),
@@ -69,6 +81,9 @@ pub fn handle_create_campaign(
         target_count,
         contributor_count: 0,
         deadline_unix_ts,
+        delivery_deadline_unix_ts,
+        dispute_deadline_unix_ts,
+        settled_count: 0,
         status: CampaignStatus::Fundraising,
         bump: ctx.bumps.campaign,
         escrow_bump: ctx.bumps.escrow,

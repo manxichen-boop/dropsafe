@@ -29,4 +29,20 @@ pub enum ErrorCode {
     AlreadyReleased,
     #[msg("Arithmetic overflow")]
     MathOverflow,
+    #[msg("The shipping deadline must be after the campaign deadline")]
+    InvalidDeliveryDeadline,
+    #[msg("The dispute deadline must be after the shipping deadline")]
+    InvalidDisputeDeadline,
+    #[msg("The shipping deadline has passed, so the organizer can no longer withdraw")]
+    DeliveryDeadlinePassed,
+    #[msg("The organizer has not withdrawn yet, so there is no delivery to confirm")]
+    NotDelivering,
+    #[msg("You can report non-delivery only after the shipping deadline")]
+    DeliveryDeadlineNotReached,
+    #[msg("The dispute window has closed")]
+    DisputeWindowClosed,
+    #[msg("The organizer can claim unconfirmed shares only after the dispute window closes")]
+    DisputeWindowOpen,
+    #[msg("This contribution does not belong to this buyer")]
+    WrongBuyer,
 }

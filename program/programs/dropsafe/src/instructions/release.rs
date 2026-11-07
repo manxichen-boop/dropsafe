@@ -3,7 +3,7 @@ use anchor_lang::prelude::*;
 use crate::{
     constants::*,
     error::ErrorCode,
-    state::{Campaign, CampaignStatus, Escrow},
+    state::{upfront_share, Campaign, CampaignStatus, Escrow},
 };
 
 #[derive(Accounts)]
@@ -32,31 +32,32 @@ pub struct Release<'info> {
 pub fn handle_release(ctx: Context<Release>) -> Result<()> {
     let campaign = &ctx.accounts.campaign;
 
-    // 校验:不能重复提取
-    require!(
-        campaign.status != CampaignStatus::Released,
-        ErrorCode::AlreadyReleased
-    );
     // 校验:人数必须达标
     require!(
         campaign.contributor_count >= campaign.target_count,
         ErrorCode::TargetNotReached
     );
+    // 校验:首款只能提取一次
+    require!(
+        campaign.status == CampaignStatus::Fundraising,
+        ErrorCode::AlreadyReleased
+    );
+    // 校验:必须在发货期限之前提取。过了期限,买家可以全额取回,团长不能再和买家抢钱
+    require!(
+        Clock::get()?.unix_timestamp < campaign.delivery_deadline_unix_ts,
+        ErrorCode::DeliveryDeadlinePassed
+    );
 
-    // 只转出"余额减去租金豁免最低余额"的部分。
-    // 保留这部分,金库账户才能继续存在,重复提取时才能明确返回 AlreadyReleased
-    let escrow_info = ctx.accounts.escrow.to_account_info();
-    let rent_exempt_minimum = Rent::get()?.minimum_balance(escrow_info.data_len());
-    let amount = escrow_info
-        .lamports()
-        .checked_sub(rent_exempt_minimum)
+    // 只转出每份出资的 70%,剩下 30% 留在托管里,按买家逐个结算
+    let amount = upfront_share(campaign.price_per_person_lamports)?
+        .checked_mul(campaign.contributor_count as u64)
         .ok_or(ErrorCode::MathOverflow)?;
 
     ctx.accounts.escrow.sub_lamports(amount)?;
     ctx.accounts.organizer.add_lamports(amount)?;
 
-    // 状态改为已提取
-    ctx.accounts.campaign.status = CampaignStatus::Released;
+    // 状态改为等待收货
+    ctx.accounts.campaign.status = CampaignStatus::Delivering;
 
     Ok(())
 }
