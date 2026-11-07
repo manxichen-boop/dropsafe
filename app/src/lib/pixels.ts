@@ -437,14 +437,14 @@ const MINI_LOCKIE = [
   "..TT...TT..",
 ];
 
-// 牛皮纸色系:饱和度低,花纹只比底色深浅一点,不抢视线
+// 牛皮纸色系:饱和度低,花纹和底色的对比很弱,不抢视线
 const KRAFT = {
   base: "#D3C8B0",
-  light: "#DFD6C3",
-  band: "#C8BBA1",
-  main: "#C3B69B",
-  motif: "#AFA187",
-  dark: "#948872",
+  light: "#DAD0BB",
+  band: "#CCC0A7",
+  main: "#C9BDA3",
+  motif: "#BDB197",
+  dark: "#ADA28B",
 };
 
 export function drawFairIsle(): Grid {
