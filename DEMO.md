@@ -43,7 +43,7 @@
 
 ### 1:50–2:00 收尾
 
-> "DropSafe: group buys the organizer can't run away with. Live on Solana Devnet, with 17 passing tests. Next up: delivery confirmation and organizer deposits. Thanks!"
+> "To be clear about what this protects: if a group buy doesn't fill, nobody loses money. It doesn't yet stop an organizer who collects the funds and never ships, so that's what we're building next, with staged payouts and delivery confirmation. DropSafe: no target, no payout. Live on Solana Devnet. Thanks!"
 
 ## 评委可能问的问题
 

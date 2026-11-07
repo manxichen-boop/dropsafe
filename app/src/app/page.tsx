@@ -21,7 +21,9 @@ export default function HomePage() {
     setFailed(false);
     try {
       const all = await program.account.campaign.all();
-      setRows(all.sort((a, b) => b.account.campaignId.cmp(a.account.campaignId)));
+      // 开发时留下的测试活动删不掉(合约没有删除功能),只在首页隐藏,详情页仍可直接打开
+      const visible = all.filter((row) => !row.account.title.startsWith("Test:"));
+      setRows(visible.sort((a, b) => b.account.campaignId.cmp(a.account.campaignId)));
     } catch (e) {
       console.warn(e);
       setFailed(true);
@@ -36,7 +38,7 @@ export default function HomePage() {
     <>
       <section className="mb-12 max-w-2xl">
         <h1 className="text-4xl font-semibold leading-tight tracking-tight sm:text-5xl">
-          Group buys the organizer can&apos;t run away with.
+          No target, no payout.
         </h1>
         <p className="mt-4 text-lg text-muted">
           Your SOL waits in an on-chain escrow, not in someone&apos;s wallet. Miss the target and every buyer takes their
