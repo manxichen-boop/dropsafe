@@ -3,9 +3,9 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import type { PublicKey } from "@solana/web3.js";
-import { formatSol, type Campaign } from "@/lib/campaign";
+import { formatSol, TIERS, tierOf, type Campaign, type TierName } from "@/lib/campaign";
 import { useI18n } from "@/lib/i18n";
-import { escrowPda, useDropsafe } from "@/lib/program";
+import { escrowPda, seatsByCampaign, useDropsafe } from "@/lib/program";
 import { CampaignCard } from "@/components/CampaignCard";
 import { LiveStats, type Stats } from "@/components/LiveStats";
 import { Lockie } from "@/components/Lockie";
@@ -24,45 +24,45 @@ export default function HomePage() {
   const [buyersByCampaign, setBuyersByCampaign] = useState<Record<string, string[]>>({});
   const [stats, setStats] = useState<Stats | null>(null);
   const [failed, setFailed] = useState(false);
+  const [filter, setFilter] = useState<TierName | "all">("all");
 
   const load = useCallback(async () => {
     setFailed(false);
     try {
       const connection = program.provider.connection;
-      const [campaigns, contributions] = await Promise.all([
+      const [campaigns, seats, organizers, buyers] = await Promise.all([
         program.account.campaign.all(),
         program.account.contribution.all(),
+        program.account.organizerStats.all(),
+        program.account.buyerStats.all(),
       ]);
 
-      const buyers: Record<string, string[]> = {};
-      for (const row of contributions) {
-        (buyers[row.account.campaign.toBase58()] ??= []).push(row.account.buyer.toBase58());
-      }
-      setBuyersByCampaign(buyers);
+      const grouped = seatsByCampaign(campaigns.map((row) => row.publicKey), seats);
+      setBuyersByCampaign(
+        Object.fromEntries(Object.entries(grouped).map(([key, list]) => [key, list.map((seat) => seat.account.buyer.toBase58())]))
+      );
 
       // 实时数据全部算自链上账户,不写死任何数字
       const escrowKeys = campaigns.map((row) => escrowPda(row.publicKey));
       let lockedLamports = 0;
       for (let i = 0; i < escrowKeys.length; i += CHUNK) {
         const infos = await connection.getMultipleAccountsInfo(escrowKeys.slice(i, i + CHUNK));
-        for (const info of infos) {
-          if (!info) continue;
-          lockedLamports += info.lamports - (await connection.getMinimumBalanceForRentExemption(info.data.length));
+        const live = infos.filter((info) => info !== null);
+        if (live.length > 0) {
+          const rent = await connection.getMinimumBalanceForRentExemption(live[0].data.length);
+          for (const info of live) lockedLamports += info.lamports - rent;
         }
       }
+      setStats({
+        lockedSol: formatSol(lockedLamports),
+        funded: organizers.reduce(
+          (sum, { account }) => sum + account.shielded.funded.toNumber() + account.standard.funded.toNumber() + account.trust.funded.toNumber(),
+          0
+        ),
+        refunds: buyers.reduce((sum, { account }) => sum + account.seatsRefunded.toNumber(), 0),
+      });
 
-      let funded = 0;
-      let refunds = 0;
-      for (const { publicKey, account } of campaigns) {
-        if (account.contributorCount >= account.targetCount) funded += 1;
-        // 还没放款的活动里,凭证被关闭就意味着买家退款了
-        if ("failed" in account.status || "fundraising" in account.status) {
-          refunds += account.contributorCount - (buyers[publicKey.toBase58()]?.length ?? 0);
-        }
-      }
-      setStats({ lockedSol: formatSol(lockedLamports), funded, refunds });
-
-      // 开发时留下的测试活动删不掉(合约没有删除功能),只在首页隐藏,详情页仍可直接打开
+      // 开发时留下的测试活动删不掉,只在首页隐藏,详情页仍可直接打开
       const visible = campaigns.filter((row) => !row.account.title.startsWith("Test:"));
       setRows(visible.sort((a, b) => b.account.campaignId.cmp(a.account.campaignId)));
     } catch (e) {
@@ -74,6 +74,8 @@ export default function HomePage() {
   useEffect(() => {
     load();
   }, [load]);
+
+  const shown = rows?.filter((row) => filter === "all" || tierOf(row.account) === filter);
 
   return (
     <>
@@ -97,6 +99,22 @@ export default function HomePage() {
         <h2 className="font-display text-2xl font-semibold">{t.home.listTitle}</h2>
         <p className="mt-1 text-sm text-muted">{t.home.listNote}</p>
 
+        <div role="group" aria-label={t.home.filterLabel} className="mt-4 flex flex-wrap gap-2">
+          {(["all", ...TIERS] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              aria-pressed={filter === option}
+              onClick={() => setFilter(option)}
+              className={`min-h-9 rounded-xl border-[1.5px] px-3 text-sm font-medium ${
+                filter === option ? "border-ink bg-ink text-bg" : "border-line bg-surface hover:border-ink"
+              }`}
+            >
+              {option === "all" ? t.home.filterAll : t.tier[option]}
+            </button>
+          ))}
+        </div>
+
         {failed && (
           <div className="mt-6 rounded-2xl border-[1.5px] border-danger bg-danger-tint p-4 text-sm text-danger-ink">
             <p>{t.home.loadFailed}</p>
@@ -115,9 +133,10 @@ export default function HomePage() {
             </Link>
           </div>
         )}
+        {rows && rows.length > 0 && shown?.length === 0 && <p className="py-10 text-center text-muted">{t.home.filterEmpty}</p>}
 
         <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {rows?.map(({ publicKey, account }) => (
+          {shown?.map(({ publicKey, account }) => (
             <CampaignCard
               key={publicKey.toBase58()}
               address={publicKey.toBase58()}

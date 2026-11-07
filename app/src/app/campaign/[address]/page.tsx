@@ -5,43 +5,48 @@ import { use, useCallback, useEffect, useMemo, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { PublicKey, SystemProgram } from "@solana/web3.js";
 import {
+  bondHeld,
   displayStatus,
   formatCountdown,
   formatSol,
-  holdbackPerBuyer,
   nextDeadline,
+  RECOVERY_PERCENT,
+  releaseAmount,
+  reportAmount,
+  settleAmount,
   shortAddress,
-  upfrontTotal,
+  tierOf,
+  type BuyerStats,
   type Campaign,
+  type Contribution,
   type DisplayStatus,
 } from "@/lib/campaign";
 import { explorerAddress } from "@/lib/config";
 import { translateError, type FriendlyError } from "@/lib/errors";
 import { dateLocale, useI18n } from "@/lib/i18n";
-import { loadMeta, type CampaignMeta } from "@/lib/meta";
-import { contributionPda, escrowPda, useDropsafe } from "@/lib/program";
+import { buyerStatsPda, contributionPda, escrowPda, organizerStatsPda, seatsByCampaign, useDropsafe } from "@/lib/program";
 import { ProductImage } from "@/components/CampaignCard";
 import { CalendarIcon, CoinIcon, JarIcon, PeopleIcon } from "@/components/icons";
 import { Lockie, type LockieMood } from "@/components/Lockie";
 import { ErrorNotice, SuccessNotice, WalletHint } from "@/components/Notice";
 import { SeatBuddies } from "@/components/SeatBuddies";
-import { StatusBadge } from "@/components/StatusBadge";
+import { StatusBadge, TierBadge } from "@/components/StatusBadge";
 import { useNow } from "@/components/useNow";
 import { WalletButton } from "@/components/WalletButton";
-
-// 一笔交易放不下太多结算指令,一次最多领取这么多位买家的尾款
-const MAX_CLAIMS_PER_TX = 4;
 
 const MOOD: Record<DisplayStatus, LockieMood> = {
   open: "waiting",
   funded: "celebrating",
   failed: "refunding",
   abandoned: "refunding",
+  cancelled: "refunding",
   delivering: "guarding",
-  dispute: "guarding",
-  claimable: "paying",
-  completed: "paying",
+  appeal: "guarding",
+  settling: "paying",
+  closed: "paying",
 };
+
+type Seat = { publicKey: PublicKey; account: Contribution };
 
 function parseAddress(raw: string): PublicKey | null {
   try {
@@ -53,39 +58,29 @@ function parseAddress(raw: string): PublicKey | null {
 
 function Timeline({ status }: { status: DisplayStatus }) {
   const { t } = useI18n();
-  const failedPath = status === "failed" || status === "abandoned";
-  const steps = failedPath
-    ? [t.detail.stepRaising, t.detail.stepNotFilled, t.detail.stepRefund]
-    : [t.detail.stepRaising, t.detail.stepFunded, t.detail.stepReleased, t.detail.stepDone];
-  const current = failedPath
-    ? 2
-    : status === "open"
-      ? 0
-      : status === "funded"
-        ? 1
-        : status === "completed"
-          ? 3
-          : 2;
-  // 团长一直没提取的情况属于已成团,不是没凑满
-  const labels = status === "abandoned" ? [t.detail.stepRaising, t.detail.stepFunded, t.detail.stepRefund] : steps;
+  const d = t.detail;
+  const refundPath = status === "failed" || status === "abandoned" || status === "cancelled";
+  const labels = refundPath
+    ? [
+        d.stepRaising,
+        status === "failed" ? d.stepNotFilled : status === "cancelled" ? d.stepCancelled : d.stepAbandoned,
+        d.stepRefund,
+      ]
+    : [d.stepRaising, d.stepFunded, d.stepReleased, d.stepDone];
+  const positions: Partial<Record<DisplayStatus, number>> = { open: 0, funded: 1, delivering: 2, appeal: 2, settling: 2, closed: 3 };
+  const current = refundPath ? 2 : (positions[status] ?? 0);
 
   return (
     <ol className="space-y-2">
       {labels.map((label, i) => {
-        const done = i < current || (i === current && status === "completed");
-        const active = i === current && status !== "completed";
+        const done = i < current || (i === current && status === "closed");
+        const active = i === current && status !== "closed";
         return (
           <li key={label} aria-current={active ? "step" : undefined} className="flex items-center gap-3 text-sm">
             <span
               aria-hidden
               className={`h-4 w-4 shrink-0 rounded-full border-[1.5px] ${
-                done
-                  ? "border-safe bg-safe"
-                  : active
-                    ? failedPath
-                      ? "border-danger bg-danger"
-                      : "border-ink bg-sun"
-                    : "border-line bg-surface"
+                done ? "border-safe bg-safe" : active ? (refundPath ? "border-danger bg-danger" : "border-ink bg-sun") : "border-line bg-surface"
               }`}
             />
             <span className={active || done ? "font-semibold" : "text-muted"}>{label}</span>
@@ -130,22 +125,20 @@ export default function CampaignPage({
   const { publicKey } = useWallet();
   const now = useNow();
   const { lang, t } = useI18n();
+  const d = t.detail;
 
   const [campaign, setCampaign] = useState<Campaign | null | undefined>(undefined);
   const [escrowLamports, setEscrowLamports] = useState(0);
-  const [joined, setJoined] = useState(false);
-  const [unconfirmedBuyers, setUnconfirmedBuyers] = useState<PublicKey[]>([]);
+  const [seats, setSeats] = useState<Seat[]>([]);
+  const [buyerRecords, setBuyerRecords] = useState<Record<string, BuyerStats | null>>({});
   const [loadFailed, setLoadFailed] = useState(false);
   const [pending, setPending] = useState(false);
-  const [meta, setMeta] = useState<CampaignMeta>({});
   const [success, setSuccess] = useState<{ title: string; signature?: string } | null>(
     created ? { title: "created", signature: created } : null
   );
   const [error, setError] = useState<FriendlyError | null>(null);
 
   const escrowKey = useMemo(() => (campaignKey ? escrowPda(campaignKey) : null), [campaignKey]);
-
-  useEffect(() => setMeta(loadMeta(address, lang)), [address, lang]);
 
   const refresh = useCallback(async () => {
     if (!campaignKey || !escrowKey) {
@@ -154,27 +147,29 @@ export default function CampaignPage({
     }
     try {
       const connection = program.provider.connection;
-      const [account, escrowInfo, contribution, contributions] = await Promise.all([
+      const [account, escrowInfo, allSeats] = await Promise.all([
         program.account.campaign.fetchNullable(campaignKey),
         connection.getAccountInfo(escrowKey),
-        publicKey ? connection.getAccountInfo(contributionPda(campaignKey, publicKey)) : Promise.resolve(null),
-        // 凭证还在,说明这位买家的份额还没结算。campaign 字段紧跟在 8 字节的账户标识后面
-        program.account.contribution.all([{ memcmp: { offset: 8, bytes: campaignKey.toBase58() } }]),
+        program.account.contribution.all(),
       ]);
       setCampaign(account);
-      setJoined(contribution !== null);
-      setUnconfirmedBuyers(contributions.map((row) => row.account.buyer));
+      const mine = seatsByCampaign([campaignKey], allSeats)[campaignKey.toBase58()] ?? [];
+      setSeats(mine);
       if (escrowInfo) {
-        // 账户余额里有一部分是租金,不属于买家托管的钱,要扣掉再显示
+        // 账户余额里有一部分是租金,不属于托管的钱,要扣掉再显示
         const rent = await connection.getMinimumBalanceForRentExemption(escrowInfo.data.length);
         setEscrowLamports(escrowInfo.lamports - rent);
+      }
+      if (mine.length > 0) {
+        const records = await program.account.buyerStats.fetchMultiple(mine.map((seat) => buyerStatsPda(seat.account.buyer)));
+        setBuyerRecords(Object.fromEntries(mine.map((seat, i) => [seat.account.buyer.toBase58(), records[i]])));
       }
       setLoadFailed(false);
     } catch (e) {
       console.warn(e);
       setLoadFailed(true);
     }
-  }, [campaignKey, escrowKey, program, publicKey]);
+  }, [campaignKey, escrowKey, program]);
 
   useEffect(() => {
     refresh();
@@ -198,13 +193,13 @@ export default function CampaignPage({
     }
   };
 
-  if (campaign === undefined && !loadFailed) return <p className="py-12 text-center text-muted">{t.detail.loading}</p>;
+  if (campaign === undefined && !loadFailed) return <p className="py-12 text-center text-muted">{d.loading}</p>;
   if (loadFailed && !campaign) {
     return (
       <div className="py-12 text-center">
-        <p className="text-danger-ink">{t.detail.loadFailed}</p>
+        <p className="text-danger-ink">{d.loadFailed}</p>
         <button onClick={refresh} className="mt-2 font-semibold underline underline-offset-4">
-          {t.detail.retry}
+          {d.retry}
         </button>
       </div>
     );
@@ -213,184 +208,238 @@ export default function CampaignPage({
     return (
       <div className="flex flex-col items-center py-12 text-center">
         <Lockie mood="sleeping" size={180} decorative />
-        <p className="mt-2 text-muted">{t.detail.notFound}</p>
+        <p className="mt-2 text-muted">{d.notFound}</p>
         <Link href="/" className="mt-2 font-semibold underline underline-offset-4">
-          {t.detail.backHome}
+          {d.backHome}
         </Link>
       </div>
     );
   }
 
   const status = displayStatus(campaign, now);
-  const isOrganizer = publicKey?.equals(campaign.organizer) ?? false;
+  const tier = tierOf(campaign);
+  const organizer = campaign.organizer;
+  const isOrganizer = publicKey?.equals(organizer) ?? false;
+  const mySeat = publicKey ? seats.find((seat) => seat.account.buyer.equals(publicKey)) : undefined;
+  const mySeatPaid = !!mySeat && "paid" in mySeat.account.status;
   const next = nextDeadline(campaign, status);
-  const price = formatSol(campaign.pricePerPersonLamports);
-  const holdback = formatSol(holdbackPerBuyer(campaign));
-  const timeLabel = (t.detail.timeTo as Partial<Record<DisplayStatus, string>>)[status] ?? t.detail.timeNone;
-  const claimCount = Math.min(unconfirmedBuyers.length, MAX_CLAIMS_PER_TX);
+  const price = formatSol(campaign.price);
+  const appealOver = now >= campaign.appealEnd.toNumber();
+  const timeLabel = (d.timeTo as Partial<Record<DisplayStatus, string>>)[status] ?? d.timeNone;
+  const bond = bondHeld(campaign);
+  const buyerFunds = Math.max(0, escrowLamports - bond.toNumber());
+  const formatDate = (seconds: number) => new Date(seconds * 1000).toLocaleString(dateLocale(lang));
+
+  const organizerStats = organizerStatsPda(organizer);
   const buyerAccounts = () => ({
     buyer: publicKey!,
     campaign: campaignKey,
     escrow: escrowKey,
     contribution: contributionPda(campaignKey, publicKey!),
+    buyerStats: buyerStatsPda(publicKey!),
   });
 
   const contribute = () =>
-    send(t.detail.done.joined, () =>
+    send(d.done.joined, () =>
       program.methods
         .contribute()
-        .accountsPartial({ ...buyerAccounts(), systemProgram: SystemProgram.programId })
+        .accountsPartial({ ...buyerAccounts(), organizerStats, systemProgram: SystemProgram.programId })
         .rpc()
     );
-
+  const withdraw = () => send(d.done.left, () => program.methods.withdrawBeforeFill().accountsPartial(buyerAccounts()).rpc());
   const refund = () =>
-    send(t.detail.done.refunded, () =>
-      program.methods.refund().accountsPartial(buyerAccounts()).rpc()
+    send(d.done.refunded, () => program.methods.refund().accountsPartial({ ...buyerAccounts(), organizerStats }).rpc());
+  const cancel = () =>
+    send(d.done.cancelled, () =>
+      program.methods.cancelCampaign().accountsPartial({ organizer: publicKey!, campaign: campaignKey, organizerStats }).rpc()
     );
-
   const release = () =>
-    send(t.detail.done.withdrawn, () =>
+    send(d.done.withdrawn, () =>
       program.methods
-        .release()
-        .accountsPartial({ organizer: publicKey!, campaign: campaignKey, escrow: escrowKey })
+        .releaseUpfront()
+        .accountsPartial({ organizer: publicKey!, campaign: campaignKey, escrow: escrowKey, organizerStats })
         .rpc()
     );
-
-  const confirmDelivery = () =>
-    send(t.detail.done.confirmed, () =>
+  const finalizeIx = () =>
+    program.methods.finalizeCampaign().accountsPartial({ caller: publicKey!, campaign: campaignKey, organizerStats }).instruction();
+  const reclaim = () =>
+    send(d.done.reclaimed, async () => {
+      // 链上状态还没更新时(比如没人退款),先在同一笔交易里记录结果
+      const needsFinalize = !campaign.finalized && ("fundraising" in campaign.status || "funded" in campaign.status);
+      return program.methods
+        .reclaimBond()
+        .accountsPartial({ organizer: publicKey!, campaign: campaignKey, escrow: escrowKey })
+        .preInstructions(needsFinalize ? [await finalizeIx()] : [])
+        .rpc();
+    });
+  const confirm = () =>
+    send(d.done.confirmed, () =>
       program.methods
         .confirmDelivery()
-        .accountsPartial({ ...buyerAccounts(), organizer: campaign.organizer })
+        .accountsPartial({ buyer: publicKey!, campaign: campaignKey, contribution: contributionPda(campaignKey, publicKey!) })
         .rpc()
     );
-
-  const claimUndelivered = () =>
-    send(t.detail.done.refunded, () =>
-      program.methods.claimUndelivered().accountsPartial(buyerAccounts()).rpc()
+  const report = () =>
+    send(d.done.reported, () =>
+      program.methods
+        .reportNotReceived()
+        .accountsPartial({ buyer: publicKey!, campaign: campaignKey, contribution: contributionPda(campaignKey, publicKey!) })
+        .rpc()
+    );
+  const settle = (buyer: PublicKey) =>
+    send(d.done.settled, () =>
+      program.methods
+        .settleSeat()
+        .accountsPartial({
+          caller: publicKey!,
+          organizer,
+          buyer,
+          campaign: campaignKey,
+          escrow: escrowKey,
+          contribution: contributionPda(campaignKey, buyer),
+          organizerStats,
+          buyerStats: buyerStatsPda(buyer),
+        })
+        .rpc()
+    );
+  const finalize = () =>
+    send(d.done.finalized, () =>
+      program.methods.finalizeCampaign().accountsPartial({ caller: publicKey!, campaign: campaignKey, organizerStats }).rpc()
     );
 
-  const claimUnconfirmed = () =>
-    send(t.detail.done.claimed, async () => {
-      // 第一位买家作为主指令,其余的放进同一笔交易,团长只需签一次
-      const [first, ...rest] = unconfirmedBuyers.slice(0, MAX_CLAIMS_PER_TX);
-      const accountsFor = (buyer: PublicKey) => ({
-        organizer: publicKey!,
-        buyer,
-        campaign: campaignKey,
-        escrow: escrowKey,
-        contribution: contributionPda(campaignKey, buyer),
-      });
-      const others = await Promise.all(
-        rest.map((buyer) => program.methods.claimUnconfirmed().accountsPartial(accountsFor(buyer)).instruction())
-      );
-      return program.methods.claimUnconfirmed().accountsPartial(accountsFor(first)).postInstructions(others).rpc();
-    });
+  const primary = "btn-primary w-full px-3 py-3 text-base";
+  const danger = "btn-secondary w-full px-3 py-3 text-base";
+  const neutral = "btn-neutral w-full px-3 py-3 text-base";
+  const label = (text: string) => (pending ? d.pending : text);
+  const refundable = status === "failed" || status === "abandoned" || status === "cancelled";
 
-  const buttonClass = "btn-primary w-full px-3 py-3 text-base";
-  const secondaryClass = "btn-secondary w-full px-3 py-3 text-base";
-
-  const actionButtons = () => {
-    const label = (text: string) => (pending ? t.detail.pending : text);
-    const buttons = [];
-    if (status === "open" && !joined) {
+  const buttons: React.ReactNode[] = [];
+  if (publicKey) {
+    if (status === "open" && !mySeat) {
       buttons.push(
-        <button key="join" onClick={contribute} disabled={pending} className={buttonClass}>
-          {label(t.detail.join(price))}
+        <button key="join" onClick={contribute} disabled={pending} className={primary}>
+          {label(d.join(price))}
         </button>
       );
     }
-    if (status === "failed" && joined) {
+    if (status === "open" && mySeat) {
       buttons.push(
-        <button key="refund" onClick={refund} disabled={pending} className={buttonClass}>
-          {label(t.detail.refund(price))}
+        <button key="leave" onClick={withdraw} disabled={pending} className={neutral}>
+          {label(d.leave(price))}
         </button>
       );
     }
-    if (status === "abandoned" && joined) {
+    if (refundable && mySeat) {
       buttons.push(
-        <button key="full-refund" onClick={claimUndelivered} disabled={pending} className={buttonClass}>
-          {label(t.detail.refund(price))}
+        <button key="refund" onClick={refund} disabled={pending} className={primary}>
+          {label(d.refund(price))}
         </button>
       );
     }
     if (status === "funded" && isOrganizer) {
       buttons.push(
-        <button key="release" onClick={release} disabled={pending} className={buttonClass}>
-          {label(t.detail.withdraw(formatSol(upfrontTotal(campaign))))}
+        <button key="release" onClick={release} disabled={pending} className={primary}>
+          {label(d.withdraw(formatSol(releaseAmount(campaign))))}
         </button>
       );
     }
-    if ((status === "delivering" || status === "dispute" || status === "claimable") && joined) {
+    if ((status === "delivering" || status === "appeal") && mySeatPaid) {
       buttons.push(
-        <button key="confirm" onClick={confirmDelivery} disabled={pending} className={buttonClass}>
-          {label(t.detail.confirm(holdback))}
+        <button key="confirm" onClick={confirm} disabled={pending} className={primary}>
+          {label(d.confirm)}
         </button>
       );
     }
-    if (status === "dispute" && joined) {
+    if (status === "appeal" && mySeatPaid) {
       buttons.push(
-        <button key="dispute" onClick={claimUndelivered} disabled={pending} className={secondaryClass}>
-          {label(t.detail.dispute(holdback))}
+        <button key="report" onClick={report} disabled={pending} className={danger}>
+          {label(tier === "trust" ? d.reportTrust : d.report(formatSol(reportAmount(campaign))))}
         </button>
       );
     }
-    if (status === "claimable" && isOrganizer && claimCount > 0) {
+    if (status === "open" && isOrganizer) {
       buttons.push(
-        <button key="claim" onClick={claimUnconfirmed} disabled={pending} className={buttonClass}>
-          {label(t.detail.claim(formatSol(holdbackPerBuyer(campaign).muln(claimCount)), claimCount))}
+        <button key="cancel" onClick={cancel} disabled={pending} className={neutral}>
+          {label(d.cancel)}
         </button>
       );
     }
-    return buttons;
-  };
+    if (refundable && isOrganizer && !campaign.bondTotal.isZero() && !campaign.bondReclaimed) {
+      buttons.push(
+        <button key="reclaim" onClick={reclaim} disabled={pending} className={primary}>
+          {label(d.reclaim(formatSol(campaign.bondTotal)))}
+        </button>
+      );
+    }
+    if (!campaign.finalized && (refundable || status === "closed")) {
+      buttons.push(
+        <button key="finalize" onClick={finalize} disabled={pending} className={neutral}>
+          {label(d.finalize)}
+        </button>
+      );
+    }
+  }
 
   const waitingMessage = () => {
     switch (status) {
       case "open":
-        return t.detail.wait.open;
+        return mySeat ? d.wait.open : d.wait.nothing;
       case "funded":
-        return joined ? t.detail.wait.fundedJoined : t.detail.wait.fundedOther;
+        return mySeat ? d.wait.funded : d.wait.full;
       case "failed":
       case "abandoned":
-        return t.detail.wait.noClaim;
+      case "cancelled":
+        return d.wait.noClaim;
       case "delivering":
-        return isOrganizer ? t.detail.wait.deliveringOrganizer : t.detail.wait.deliveringOther;
-      case "dispute":
-        return isOrganizer ? t.detail.wait.disputeOrganizer : t.detail.wait.disputeOther;
+        return isOrganizer ? d.wait.delivering : mySeat ? d.wait.deliveringBuyer : d.wait.other;
+      case "appeal":
+        return isOrganizer ? d.wait.appealOrganizer : d.wait.nothing;
       default:
-        return t.detail.wait.nothing;
+        return d.wait.nothing;
     }
   };
 
-  const buttons = publicKey ? actionButtons() : [];
+  const seatStatusLabel = (seat: Seat) =>
+    "confirmed" in seat.account.status ? d.seatConfirmed : "reported" in seat.account.status ? d.seatReported : d.seatPaid;
+  const canSettle = (seat: Seat) =>
+    "active" in campaign.status && (!("paid" in seat.account.status) || appealOver);
+  const settleLabel = (seat: Seat) => {
+    const amount = settleAmount(campaign);
+    if (amount.isZero()) return d.settleNoMoney;
+    return d.settle(formatSol(amount), "reported" in seat.account.status ? d.toBuyer : d.toOrganizer);
+  };
 
   const deadlines = [
-    { label: t.detail.joinBy, at: campaign.deadlineUnixTs.toNumber() },
-    { label: t.detail.shipBy, at: campaign.deliveryDeadlineUnixTs.toNumber() },
-    { label: t.detail.reportBy, at: campaign.disputeDeadlineUnixTs.toNumber() },
+    { label: d.joinBy, at: campaign.deadline.toNumber() },
+    { label: d.shipBy, at: campaign.deliveryDeadline.toNumber() },
+    { label: d.reportBy, at: campaign.appealEnd.toNumber() },
   ];
 
   return (
-    <div className="pb-44 md:pb-0">
+    <div className="pb-48 md:pb-0">
       <Link href="/" className="text-sm font-medium underline-offset-4 hover:underline">
-        ← {t.detail.back}
+        ← {d.back}
       </Link>
 
       <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
         <h1 className="min-w-0 break-words font-display text-3xl font-semibold leading-tight md:text-4xl">{campaign.title}</h1>
-        <StatusBadge status={status} />
+        <div className="flex flex-wrap gap-1.5">
+          <TierBadge tier={tier} />
+          <StatusBadge status={status} />
+        </div>
       </div>
 
       <div className="mt-6 grid items-start gap-6 md:grid-cols-[1fr_400px]">
         {/* 手机上购买卡片排在商品图下面,说明和资金面板往后放 */}
         <div className="contents md:block md:space-y-6">
           <div className="order-1">
-            <ProductImage meta={meta} title={campaign.title} large />
-            <p className="mt-4 leading-relaxed">{meta.description ?? t.detail.noDescription}</p>
+            <ProductImage url={campaign.imageUrl} title={campaign.title} large />
+            {campaign.imageUrl && <p className="mt-2 text-xs text-muted">{d.imageNote}</p>}
+            <p className="mt-4 whitespace-pre-wrap break-words leading-relaxed">{campaign.description || d.noDescription}</p>
           </div>
 
           <section className="card order-3 p-5">
-            <h2 className="font-display text-xl font-semibold">{t.detail.timeline}</h2>
+            <h2 className="font-display text-xl font-semibold">{d.timeline}</h2>
             <div className="mt-4">
               <Timeline status={status} />
             </div>
@@ -398,7 +447,7 @@ export default function CampaignPage({
               {deadlines.map((step) => (
                 <div key={step.label} className="flex flex-wrap justify-between gap-x-4">
                   <dt className={now >= step.at ? "text-muted" : "font-medium"}>{step.label}</dt>
-                  <dd className="font-mono text-muted">{new Date(step.at * 1000).toLocaleString(dateLocale(lang))}</dd>
+                  <dd className="font-mono text-muted">{formatDate(step.at)}</dd>
                 </div>
               ))}
             </dl>
@@ -407,44 +456,97 @@ export default function CampaignPage({
           <section className="card order-4 p-5">
             <h2 className="flex items-center gap-2 font-display text-xl font-semibold">
               <JarIcon size={28} />
-              {t.detail.fundsTitle}
+              {d.fundsTitle}
             </h2>
-            <p className="mt-2 text-sm leading-relaxed">{t.detail.fundsNote}</p>
+            <p className="mt-2 text-sm leading-relaxed">{d.fundsNote}</p>
             <dl className="mt-4 space-y-3 text-sm">
               <div>
-                <dt className="text-muted">{t.detail.fundsLocked}</dt>
+                <dt className="text-muted">{d.fundsLocked}</dt>
                 <dd className="mt-0.5 font-mono text-xl font-medium">{formatSol(escrowLamports)} SOL</dd>
               </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <dt className="text-muted">{d.fundsBuyers}</dt>
+                  <dd className="font-mono">{formatSol(buyerFunds)} SOL</dd>
+                </div>
+                <div>
+                  <dt className="text-muted">{d.fundsBond}</dt>
+                  <dd className="font-mono">{formatSol(bond)} SOL</dd>
+                </div>
+              </div>
               <div>
-                <dt className="text-muted">{t.detail.fundsAddress}</dt>
+                <dt className="text-muted">{d.fundsAddress}</dt>
                 <dd className="mt-1 flex items-center justify-between gap-3">
                   <code className="min-w-0 break-all font-mono text-sm">{escrowKey.toBase58()}</code>
                   <CopyAddress value={escrowKey.toBase58()} />
                 </dd>
               </div>
               <div>
-                <dt className="text-muted">{isOrganizer ? t.detail.organizerYou : t.detail.organizer}</dt>
-                <dd className="mt-0.5 font-mono">{shortAddress(campaign.organizer.toBase58())}</dd>
+                <dt className="text-muted">{isOrganizer ? d.organizerYou : d.organizer}</dt>
+                <dd className="mt-0.5">
+                  <Link href={`/organizer/${organizer.toBase58()}`} className="font-mono underline underline-offset-4">
+                    {shortAddress(organizer.toBase58())}
+                  </Link>
+                </dd>
               </div>
             </dl>
             <a href={explorerAddress(escrowKey.toBase58())} target="_blank" rel="noreferrer" className="mt-4 inline-block text-sm font-semibold underline underline-offset-4">
-              {t.detail.explorer}
+              {d.explorer}
             </a>
           </section>
+
+          {seats.length > 0 && (
+            <section className="card order-5 p-5">
+              <h2 className="font-display text-xl font-semibold">{d.settleTitle}</h2>
+              <ul className="mt-3 space-y-3">
+                {seats.map((seat) => {
+                  const buyer = seat.account.buyer.toBase58();
+                  const record = buyerRecords[buyer];
+                  return (
+                    <li key={buyer} className="border-t-[1.5px] border-line pt-3 text-sm first:border-t-0 first:pt-0">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <Link href={`/buyer/${buyer}`} className="font-mono underline underline-offset-4">
+                          {shortAddress(buyer)}
+                        </Link>
+                        <span className="text-muted">{seatStatusLabel(seat)}</span>
+                      </div>
+                      {isOrganizer && (
+                        <p className="mt-1 text-xs text-muted">
+                          {record
+                            ? d.buyerSummary(record.campaignsJoined.toString(), record.seatsConfirmed.toString(), record.seatsReported.toString())
+                            : d.newBuyer}
+                        </p>
+                      )}
+                      {publicKey && canSettle(seat) && (
+                        <button onClick={() => settle(seat.account.buyer)} disabled={pending} className="btn-neutral mt-2 w-full px-3 py-2 text-sm">
+                          {label(settleLabel(seat))}
+                        </button>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            </section>
+          )}
         </div>
 
         <aside className="order-2 space-y-3 md:sticky md:top-4">
           <div className="card p-5">
             <div className="flex items-center gap-3">
               <Lockie mood={MOOD[status]} size={112} className="shrink-0" />
-              <p className="text-sm leading-relaxed">{t.detail.explain[status]}</p>
+              <p className="text-sm leading-relaxed">{d.explain[status]}</p>
             </div>
+
+            <p className="mt-4 rounded-2xl bg-bg p-3 text-sm font-semibold">
+              {t.tier.recovery(RECOVERY_PERCENT[tier])}
+              {tier !== "trust" && <span className="mt-0.5 block text-xs font-normal text-muted">{t.tier.recoveryNote}</span>}
+            </p>
 
             <dl className="mt-5 grid grid-cols-2 gap-4">
               <div>
                 <dt className="flex items-center gap-1.5 text-sm text-muted">
                   <CoinIcon size={20} />
-                  {t.detail.price}
+                  {d.price}
                 </dt>
                 <dd className="mt-1 font-mono text-xl font-medium">{price} SOL</dd>
               </div>
@@ -456,37 +558,33 @@ export default function CampaignPage({
                 <dd className="mt-1 font-mono text-xl font-medium">{next === null || next <= now ? t.ended : formatCountdown(next - now)}</dd>
               </div>
             </dl>
+            <p className="mt-3 text-xs text-muted">{d.lockedUntil(formatDate(campaign.appealEnd.toNumber()))}</p>
 
             <div className="mt-5">
               <p className="mb-2 flex items-center gap-1.5 text-sm text-muted">
                 <PeopleIcon size={20} />
-                {t.detail.seats}: {t.home.joinedCount(campaign.contributorCount, campaign.targetCount)}
+                {d.seats}: {t.home.joinedCount(campaign.joinedCount, campaign.targetCount)}
               </p>
               <SeatBuddies
                 campaign={address}
                 target={campaign.targetCount}
-                joined={campaign.contributorCount}
-                buyers={unconfirmedBuyers.map((buyer) => buyer.toBase58())}
+                joined={campaign.joinedCount}
+                buyers={seats.map((seat) => seat.account.buyer.toBase58())}
                 size="lg"
                 hop={status === "funded"}
-                label={t.home.joinedCount(campaign.contributorCount, campaign.targetCount)}
+                label={t.home.joinedCount(campaign.joinedCount, campaign.targetCount)}
               />
             </div>
           </div>
 
-          {success && (
-            <SuccessNotice
-              title={success.title === "created" ? t.detail.done.created : success.title}
-              signature={success.signature}
-            />
-          )}
+          {success && <SuccessNotice title={success.title === "created" ? d.done.created : success.title} signature={success.signature} />}
           {error && <ErrorNotice error={error} />}
 
           {/* 主按钮:手机上固定在屏幕底部,桌面上跟在卡片下面 */}
-          <div className="fixed inset-x-0 bottom-0 z-20 space-y-3 border-t-[1.5px] border-line bg-surface p-4 md:static md:rounded-[20px] md:border-[1.5px]">
+          <div className="fixed inset-x-0 bottom-0 z-20 max-h-[50vh] space-y-3 overflow-y-auto border-t-[1.5px] border-line bg-surface p-4 md:static md:max-h-none md:rounded-[20px] md:border-[1.5px]">
             {!publicKey ? (
               <div className="flex flex-wrap items-center justify-between gap-3">
-                <span className="text-sm">{t.detail.connect}</span>
+                <span className="text-sm">{d.connect}</span>
                 <WalletButton />
               </div>
             ) : buttons.length > 0 ? (

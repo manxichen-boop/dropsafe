@@ -42,3 +42,29 @@ export const contributionPda = (campaign: PublicKey, buyer: PublicKey) =>
     [Buffer.from("contribution"), campaign.toBuffer(), buyer.toBuffer()],
     PROGRAM_ID
   )[0];
+
+export const organizerStatsPda = (organizer: PublicKey) =>
+  PublicKey.findProgramAddressSync([Buffer.from("organizer"), organizer.toBuffer()], PROGRAM_ID)[0];
+
+export const buyerStatsPda = (buyer: PublicKey) =>
+  PublicKey.findProgramAddressSync([Buffer.from("buyer"), buyer.toBuffer()], PROGRAM_ID)[0];
+
+// 名额凭证里没有活动地址,只能用 PDA 反推它属于哪个活动。Devnet 上数量很少,够用
+export function seatsByCampaign<T extends { publicKey: PublicKey; account: { buyer: PublicKey } }>(
+  campaigns: PublicKey[],
+  seats: T[]
+): Record<string, T[]> {
+  const owners = new Map<string, string>();
+  const buyers = new Set(seats.map((seat) => seat.account.buyer.toBase58()));
+  for (const campaign of campaigns) {
+    for (const buyer of buyers) {
+      owners.set(contributionPda(campaign, new PublicKey(buyer)).toBase58(), campaign.toBase58());
+    }
+  }
+  const grouped: Record<string, T[]> = {};
+  for (const seat of seats) {
+    const owner = owners.get(seat.publicKey.toBase58());
+    if (owner) (grouped[owner] ??= []).push(seat);
+  }
+  return grouped;
+}

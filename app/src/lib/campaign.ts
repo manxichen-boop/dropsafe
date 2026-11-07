@@ -3,62 +3,96 @@ import type { IdlAccounts } from "@anchor-lang/core";
 import type { Dropsafe } from "./idl/dropsafe";
 
 export type Campaign = IdlAccounts<Dropsafe>["campaign"];
+export type Contribution = IdlAccounts<Dropsafe>["contribution"];
+export type OrganizerStats = IdlAccounts<Dropsafe>["organizerStats"];
+export type BuyerStats = IdlAccounts<Dropsafe>["buyerStats"];
+
+export type TierName = "shielded" | "standard" | "trust";
+export const TIERS: TierName[] = ["shielded", "standard", "trust"];
 
 export type DisplayStatus =
   | "open"
   | "funded"
   | "failed"
   | "abandoned"
+  | "cancelled"
   | "delivering"
-  | "dispute"
-  | "claimable"
-  | "completed";
+  | "appeal"
+  | "settling"
+  | "closed";
 
 const LAMPORTS_PER_SOL = 1_000_000_000;
 
-// 和合约里的 UPFRONT_BPS 保持一致:达标后团长先拿 70%
-const UPFRONT_BPS = 7000;
-const BPS_DENOMINATOR = 10_000;
+export const tierOf = (c: Pick<Campaign, "tier">): TierName => Object.keys(c.tier)[0] as TierName;
 
-// 链上状态很少,但用户需要看到"实际情况",这里结合时间推算出来。
-export function displayStatus(c: Campaign, nowSeconds: number): DisplayStatus {
-  if ("completed" in c.status) return "completed";
-  if ("delivering" in c.status) {
-    if (nowSeconds < c.deliveryDeadlineUnixTs.toNumber()) return "delivering";
-    if (nowSeconds < c.disputeDeadlineUnixTs.toNumber()) return "dispute";
-    return "claimable";
-  }
-  if (c.contributorCount >= c.targetCount) {
-    return nowSeconds >= c.deliveryDeadlineUnixTs.toNumber() ? "abandoned" : "funded";
-  }
-  if ("failed" in c.status || nowSeconds >= c.deadlineUnixTs.toNumber()) return "failed";
-  return "open";
+// 和合约一致:upfront = price * 7 / 10,remainder = price - upfront
+export const upfrontOf = (price: BN) => price.muln(7).divn(10);
+export const remainderOf = (price: BN) => price.sub(upfrontOf(price));
+
+// 如果团长不发货,买家能拿回的比例(需要在申诉期内报告)
+export const RECOVERY_PERCENT: Record<TierName, number> = { shielded: 100, standard: 30, trust: 0 };
+
+// 团长提取时转出多少
+export function releaseAmount(c: Campaign): BN {
+  const perSeat = tierOf(c) === "trust" ? c.price : upfrontOf(c.price);
+  return perSeat.muln(c.joinedCount);
 }
 
-// 这个状态下,倒计时应该指向哪个时间点。没有下一个时间点时返回 null
+// 买家报告未收到后能拿回多少
+export function reportAmount(c: Campaign): BN {
+  switch (tierOf(c)) {
+    case "shielded":
+      return c.price;
+    case "standard":
+      return remainderOf(c.price);
+    default:
+      return new BN(0);
+  }
+}
+
+// 一个名额结算时转给团长或买家多少
+export function settleAmount(c: Campaign): BN {
+  return reportAmount(c);
+}
+
+// 托管里还算作保证金的金额
+export function bondHeld(c: Campaign): BN {
+  if (c.bondTotal.isZero() || c.bondReclaimed) return new BN(0);
+  if ("active" in c.status || "closed" in c.status) {
+    return upfrontOf(c.price).muln(c.joinedCount - c.seatsResolved);
+  }
+  return c.bondTotal;
+}
+
+// 链上状态结合时间,推算出用户看到的“实际情况”
+export function displayStatus(c: Campaign, now: number): DisplayStatus {
+  if ("closed" in c.status) return "closed";
+  if ("cancelled" in c.status) return "cancelled";
+  if ("abandoned" in c.status) return "abandoned";
+  if ("failed" in c.status) return "failed";
+  if ("active" in c.status) {
+    if (c.seatsResolved >= c.joinedCount) return "closed";
+    if (now < c.deliveryDeadline.toNumber()) return "delivering";
+    if (now < c.appealEnd.toNumber()) return "appeal";
+    return "settling";
+  }
+  if ("funded" in c.status) return now >= c.deliveryDeadline.toNumber() ? "abandoned" : "funded";
+  return now >= c.deadline.toNumber() ? "failed" : "open";
+}
+
+// 这个状态下,倒计时应该指向哪个时间点
 export function nextDeadline(c: Campaign, status: DisplayStatus): number | null {
   switch (status) {
     case "open":
-      return c.deadlineUnixTs.toNumber();
+      return c.deadline.toNumber();
     case "funded":
     case "delivering":
-      return c.deliveryDeadlineUnixTs.toNumber();
-    case "dispute":
-      return c.disputeDeadlineUnixTs.toNumber();
+      return c.deliveryDeadline.toNumber();
+    case "appeal":
+      return c.appealEnd.toNumber();
     default:
       return null;
   }
-}
-
-export function upfrontTotal(c: Campaign): BN {
-  return c.pricePerPersonLamports
-    .mul(new BN(UPFRONT_BPS))
-    .div(new BN(BPS_DENOMINATOR))
-    .mul(new BN(c.contributorCount));
-}
-
-export function holdbackPerBuyer(c: Campaign): BN {
-  return c.pricePerPersonLamports.sub(c.pricePerPersonLamports.mul(new BN(UPFRONT_BPS)).div(new BN(BPS_DENOMINATOR)));
 }
 
 export function formatSol(lamports: number | BN): string {
@@ -86,3 +120,8 @@ export function formatCountdown(secondsLeft: number): string {
 }
 
 export const shortAddress = (address: string) => `${address.slice(0, 4)}…${address.slice(-4)}`;
+export const isHttpUrl = (value: string) => /^https?:\/\/\S+$/i.test(value.trim());
+
+// 一笔创建交易最多能放的文本字节数(测试里实测:1232 - 359,留一点余量)
+export const MAX_CREATE_TEXT_BYTES = 860;
+export const utf8Length = (value: string) => new TextEncoder().encode(value).length;

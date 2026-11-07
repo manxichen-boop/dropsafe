@@ -5,7 +5,7 @@
  * IDL can be found at `target/idl/dropsafe.json`.
  */
 export type Dropsafe = {
-  "address": "6Sno3DHv8uPp9aER9hhdToEnKFLHZwzJZjMNX5GnDj8u",
+  "address": "HPuN91VgkVKQ5kNRS79Q6kci1XJYBV9ux9fhQsQubxV2",
   "metadata": {
     "name": "dropsafe",
     "version": "0.1.0",
@@ -14,41 +14,30 @@ export type Dropsafe = {
   },
   "instructions": [
     {
-      "name": "claimUnconfirmed",
+      "name": "cancelCampaign",
       "docs": [
-        "申诉期结束后,团长领取某位买家没有异议的尾款"
+        "成团前团长取消"
       ],
       "discriminator": [
-        135,
-        151,
-        99,
-        190,
-        249,
-        183,
-        35,
-        117
+        66,
+        10,
+        32,
+        138,
+        122,
+        36,
+        134,
+        202
       ],
       "accounts": [
         {
           "name": "organizer",
           "docs": [
-            "调用者:必须是这个活动的团长"
+            "只有团长能取消"
           ],
-          "writable": true,
           "signer": true
         },
         {
-          "name": "buyer",
-          "docs": [
-            "买家的钱包:凭证关闭后,租金还给买家,不归团长"
-          ],
-          "writable": true
-        },
-        {
           "name": "campaign",
-          "docs": [
-            "所属活动"
-          ],
           "writable": true,
           "pda": {
             "seeds": [
@@ -79,186 +68,28 @@ export type Dropsafe = {
           }
         },
         {
-          "name": "escrow",
-          "docs": [
-            "这个活动的托管金库"
-          ],
+          "name": "organizerStats",
           "writable": true,
           "pda": {
             "seeds": [
               {
                 "kind": "const",
                 "value": [
-                  101,
-                  115,
-                  99,
+                  111,
                   114,
-                  111,
-                  119
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "campaign"
-              }
-            ]
-          }
-        },
-        {
-          "name": "contribution",
-          "docs": [
-            "要结算的参与凭证:结算后关闭,防止重复领取"
-          ],
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  99,
-                  111,
-                  110,
-                  116,
-                  114,
-                  105,
-                  98,
-                  117,
-                  116,
-                  105,
-                  111,
-                  110
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "campaign"
-              },
-              {
-                "kind": "account",
-                "path": "buyer"
-              }
-            ]
-          }
-        }
-      ],
-      "args": []
-    },
-    {
-      "name": "claimUndelivered",
-      "docs": [
-        "过了发货期限,买家报告未收到:取回尾款;如果团长从未提取,取回全款"
-      ],
-      "discriminator": [
-        66,
-        199,
-        73,
-        2,
-        200,
-        103,
-        170,
-        83
-      ],
-      "accounts": [
-        {
-          "name": "buyer",
-          "docs": [
-            "买家:只能本人报告未收到"
-          ],
-          "writable": true,
-          "signer": true
-        },
-        {
-          "name": "campaign",
-          "docs": [
-            "所属活动"
-          ],
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  99,
-                  97,
-                  109,
-                  112,
-                  97,
-                  105,
                   103,
-                  110
+                  97,
+                  110,
+                  105,
+                  122,
+                  101,
+                  114
                 ]
               },
               {
                 "kind": "account",
                 "path": "campaign.organizer",
                 "account": "campaign"
-              },
-              {
-                "kind": "account",
-                "path": "campaign.campaignId",
-                "account": "campaign"
-              }
-            ]
-          }
-        },
-        {
-          "name": "escrow",
-          "docs": [
-            "这个活动的托管金库,退款从这里扣"
-          ],
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  101,
-                  115,
-                  99,
-                  114,
-                  111,
-                  119
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "campaign"
-              }
-            ]
-          }
-        },
-        {
-          "name": "contribution",
-          "docs": [
-            "买家的参与凭证:退款后关闭,租金还给买家,防止重复退款"
-          ],
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  99,
-                  111,
-                  110,
-                  116,
-                  114,
-                  105,
-                  98,
-                  117,
-                  116,
-                  105,
-                  111,
-                  110
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "campaign"
-              },
-              {
-                "kind": "account",
-                "path": "buyer"
               }
             ]
           }
@@ -269,7 +100,7 @@ export type Dropsafe = {
     {
       "name": "confirmDelivery",
       "docs": [
-        "买家确认收货:他那份尾款转给团长"
+        "买家确认收货"
       ],
       "discriminator": [
         11,
@@ -285,24 +116,12 @@ export type Dropsafe = {
         {
           "name": "buyer",
           "docs": [
-            "买家:只能本人确认自己收到了货"
+            "只有买家本人能确认"
           ],
-          "writable": true,
           "signer": true
         },
         {
-          "name": "organizer",
-          "docs": [
-            "团长的钱包:尾款转到这里。用地址校验,防止转给别人"
-          ],
-          "writable": true
-        },
-        {
           "name": "campaign",
-          "docs": [
-            "所属活动"
-          ],
-          "writable": true,
           "pda": {
             "seeds": [
               {
@@ -332,36 +151,7 @@ export type Dropsafe = {
           }
         },
         {
-          "name": "escrow",
-          "docs": [
-            "这个活动的托管金库"
-          ],
-          "writable": true,
-          "pda": {
-            "seeds": [
-              {
-                "kind": "const",
-                "value": [
-                  101,
-                  115,
-                  99,
-                  114,
-                  111,
-                  119
-                ]
-              },
-              {
-                "kind": "account",
-                "path": "campaign"
-              }
-            ]
-          }
-        },
-        {
           "name": "contribution",
-          "docs": [
-            "买家的参与凭证:结算后关闭,租金还给买家,防止重复结算"
-          ],
           "writable": true,
           "pda": {
             "seeds": [
@@ -399,7 +189,7 @@ export type Dropsafe = {
     {
       "name": "contribute",
       "docs": [
-        "买家参与:把每人金额转入托管金库"
+        "买家付款参与"
       ],
       "discriminator": [
         82,
@@ -415,16 +205,13 @@ export type Dropsafe = {
         {
           "name": "buyer",
           "docs": [
-            "买家:必须签名,支付团购金额和参与凭证的租金"
+            "买家:必须签名,支付团购金额和租金"
           ],
           "writable": true,
           "signer": true
         },
         {
           "name": "campaign",
-          "docs": [
-            "要参与的活动:用种子校验它确实是本程序创建的活动"
-          ],
           "writable": true,
           "pda": {
             "seeds": [
@@ -457,7 +244,7 @@ export type Dropsafe = {
         {
           "name": "escrow",
           "docs": [
-            "托管金库:用种子校验它确实属于这个活动,钱不会被转到别处"
+            "托管金库:用种子确认它属于这个活动"
           ],
           "writable": true,
           "pda": {
@@ -483,8 +270,7 @@ export type Dropsafe = {
         {
           "name": "contribution",
           "docs": [
-            "参与凭证:由 \"contribution\" + 活动地址 + 买家地址推导。",
-            "`init` 只能成功一次,所以同一买家第二次参与时交易会直接失败,天然防止重复参与"
+            "名额凭证:init 只能成功一次,同一钱包不能参与两次"
           ],
           "writable": true,
           "pda": {
@@ -518,10 +304,62 @@ export type Dropsafe = {
           }
         },
         {
-          "name": "systemProgram",
+          "name": "organizerStats",
           "docs": [
-            "Solana 系统程序:转账和创建账户时需要"
+            "团长记录:满员时给对应档位的成团数加 1"
           ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  103,
+                  97,
+                  110,
+                  105,
+                  122,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign.organizer",
+                "account": "campaign"
+              }
+            ]
+          }
+        },
+        {
+          "name": "buyerStats",
+          "docs": [
+            "买家记录:第一次参与时初始化"
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "buyer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
       ],
@@ -530,7 +368,7 @@ export type Dropsafe = {
     {
       "name": "createCampaign",
       "docs": [
-        "团长创建一个团购活动和它的托管金库"
+        "团长创建活动;全额保障档同时存入保证金"
       ],
       "discriminator": [
         111,
@@ -546,7 +384,7 @@ export type Dropsafe = {
         {
           "name": "organizer",
           "docs": [
-            "团长:必须签名,并支付两个新账户的租金"
+            "团长:必须签名,支付租金;全额保障档还要存入保证金"
           ],
           "writable": true,
           "signer": true
@@ -554,8 +392,7 @@ export type Dropsafe = {
         {
           "name": "campaign",
           "docs": [
-            "活动账户:地址由 \"campaign\" + 团长地址 + 活动编号推导,",
-            "所以同一团长不能用同一编号创建两次"
+            "活动账户:地址由团长和活动编号推导,同一编号不能创建两次"
           ],
           "writable": true,
           "pda": {
@@ -587,7 +424,7 @@ export type Dropsafe = {
         {
           "name": "escrow",
           "docs": [
-            "托管金库:地址由 \"escrow\" + 活动地址推导,一个活动对应一个金库"
+            "托管金库,一个活动对应一个"
           ],
           "writable": true,
           "pda": {
@@ -611,10 +448,36 @@ export type Dropsafe = {
           }
         },
         {
-          "name": "systemProgram",
+          "name": "organizerStats",
           "docs": [
-            "Solana 系统程序:创建账户时需要"
+            "团长记录:第一次创建活动时初始化"
           ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  103,
+                  97,
+                  110,
+                  105,
+                  122,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "organizer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
       ],
@@ -628,7 +491,15 @@ export type Dropsafe = {
           "type": "string"
         },
         {
-          "name": "pricePerPersonLamports",
+          "name": "description",
+          "type": "string"
+        },
+        {
+          "name": "imageUrl",
+          "type": "string"
+        },
+        {
+          "name": "price",
           "type": "u64"
         },
         {
@@ -636,48 +507,133 @@ export type Dropsafe = {
           "type": "u32"
         },
         {
-          "name": "deadlineUnixTs",
+          "name": "deadline",
           "type": "i64"
         },
         {
-          "name": "deliveryDeadlineUnixTs",
+          "name": "deliveryDeadline",
           "type": "i64"
         },
         {
-          "name": "disputeDeadlineUnixTs",
-          "type": "i64"
+          "name": "tier",
+          "type": {
+            "defined": {
+              "name": "tier"
+            }
+          }
         }
       ]
     },
     {
-      "name": "refund",
+      "name": "finalizeCampaign",
       "docs": [
-        "未达标且已过截止时间:买家取回自己的钱"
+        "记录活动的最终结果,任何人都可以调用,只能一次"
       ],
       "discriminator": [
-        2,
-        96,
-        183,
-        251,
-        63,
-        208,
-        46,
-        46
+        241,
+        76,
+        201,
+        221,
+        33,
+        222,
+        220,
+        138
       ],
       "accounts": [
         {
-          "name": "buyer",
+          "name": "caller",
           "docs": [
-            "买家:只能本人签名取回自己的钱"
+            "任何人都可以调用"
+          ],
+          "signer": true
+        },
+        {
+          "name": "campaign",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  109,
+                  112,
+                  97,
+                  105,
+                  103,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign.organizer",
+                "account": "campaign"
+              },
+              {
+                "kind": "account",
+                "path": "campaign.campaignId",
+                "account": "campaign"
+              }
+            ]
+          }
+        },
+        {
+          "name": "organizerStats",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  103,
+                  97,
+                  110,
+                  105,
+                  122,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign.organizer",
+                "account": "campaign"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "reclaimBond",
+      "docs": [
+        "团长取回保证金:活动失败、放弃或取消后"
+      ],
+      "discriminator": [
+        18,
+        133,
+        105,
+        58,
+        246,
+        52,
+        103,
+        31
+      ],
+      "accounts": [
+        {
+          "name": "organizer",
+          "docs": [
+            "只有团长能取回,收款地址就是团长自己"
           ],
           "writable": true,
           "signer": true
         },
         {
           "name": "campaign",
-          "docs": [
-            "要退款的活动"
-          ],
           "writable": true,
           "pda": {
             "seeds": [
@@ -709,9 +665,87 @@ export type Dropsafe = {
         },
         {
           "name": "escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "refund",
+      "docs": [
+        "买家全额取回:未成团、团长放弃、活动已取消"
+      ],
+      "discriminator": [
+        2,
+        96,
+        183,
+        251,
+        63,
+        208,
+        46,
+        46
+      ],
+      "accounts": [
+        {
+          "name": "buyer",
           "docs": [
-            "这个活动的托管金库,退款从这里扣"
+            "买家本人"
           ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "campaign",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  109,
+                  112,
+                  97,
+                  105,
+                  103,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign.organizer",
+                "account": "campaign"
+              },
+              {
+                "kind": "account",
+                "path": "campaign.campaignId",
+                "account": "campaign"
+              }
+            ]
+          }
+        },
+        {
+          "name": "escrow",
           "writable": true,
           "pda": {
             "seeds": [
@@ -736,10 +770,254 @@ export type Dropsafe = {
         {
           "name": "contribution",
           "docs": [
-            "买家的参与凭证:种子里有买家地址,所以不能拿别人的凭证来退款。",
-            "`close = buyer` 表示退款后关闭账户、租金还给买家;",
-            "账户没了,第二次退款就会失败,防止重复退款"
+            "名额凭证:退款后关闭,所以不能重复退款"
           ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  116,
+                  114,
+                  105,
+                  98,
+                  117,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign"
+              },
+              {
+                "kind": "account",
+                "path": "buyer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "organizerStats",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  103,
+                  97,
+                  110,
+                  105,
+                  122,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign.organizer",
+                "account": "campaign"
+              }
+            ]
+          }
+        },
+        {
+          "name": "buyerStats",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "buyer"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "releaseUpfront",
+      "docs": [
+        "团长提取预付款,按档位转出"
+      ],
+      "discriminator": [
+        166,
+        159,
+        45,
+        33,
+        185,
+        139,
+        208,
+        163
+      ],
+      "accounts": [
+        {
+          "name": "organizer",
+          "docs": [
+            "只有团长能提取,收款地址就是团长自己"
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "campaign",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  109,
+                  112,
+                  97,
+                  105,
+                  103,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign.organizer",
+                "account": "campaign"
+              },
+              {
+                "kind": "account",
+                "path": "campaign.campaignId",
+                "account": "campaign"
+              }
+            ]
+          }
+        },
+        {
+          "name": "escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign"
+              }
+            ]
+          }
+        },
+        {
+          "name": "organizerStats",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  103,
+                  97,
+                  110,
+                  105,
+                  122,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign.organizer",
+                "account": "campaign"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "reportNotReceived",
+      "docs": [
+        "买家在申诉期内报告未收到"
+      ],
+      "discriminator": [
+        129,
+        188,
+        185,
+        211,
+        68,
+        88,
+        59,
+        26
+      ],
+      "accounts": [
+        {
+          "name": "buyer",
+          "docs": [
+            "只有买家本人能报告"
+          ],
+          "signer": true
+        },
+        {
+          "name": "campaign",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  109,
+                  112,
+                  97,
+                  105,
+                  103,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign.organizer",
+                "account": "campaign"
+              },
+              {
+                "kind": "account",
+                "path": "campaign.campaignId",
+                "account": "campaign"
+              }
+            ]
+          }
+        },
+        {
+          "name": "contribution",
           "writable": true,
           "pda": {
             "seeds": [
@@ -775,34 +1053,44 @@ export type Dropsafe = {
       "args": []
     },
     {
-      "name": "release",
+      "name": "settleSeat",
       "docs": [
-        "达标后:团长提取 70% 首款"
+        "结算一个名额,任何人都可以调用"
       ],
       "discriminator": [
-        253,
-        249,
-        15,
-        206,
-        28,
-        127,
-        193,
-        241
+        246,
+        125,
+        128,
+        220,
+        21,
+        123,
+        194,
+        135
       ],
       "accounts": [
         {
-          "name": "organizer",
+          "name": "caller",
           "docs": [
-            "调用者:必须签名,并且必须是这个活动的团长,否则返回 NotOrganizer"
+            "任何人都可以调用,钱只会转给合约固定的地址"
           ],
-          "writable": true,
           "signer": true
         },
         {
-          "name": "campaign",
+          "name": "organizer",
           "docs": [
-            "要提取资金的活动"
+            "团长:收款地址由合约固定"
           ],
+          "writable": true
+        },
+        {
+          "name": "buyer",
+          "docs": [
+            "买家:收款和收回租金的地址由合约固定"
+          ],
+          "writable": true
+        },
+        {
+          "name": "campaign",
           "writable": true,
           "pda": {
             "seeds": [
@@ -834,9 +1122,6 @@ export type Dropsafe = {
         },
         {
           "name": "escrow",
-          "docs": [
-            "这个活动的托管金库"
-          ],
           "writable": true,
           "pda": {
             "seeds": [
@@ -857,12 +1142,249 @@ export type Dropsafe = {
               }
             ]
           }
+        },
+        {
+          "name": "contribution",
+          "docs": [
+            "名额凭证:结算后关闭,所以不能重复结算"
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  116,
+                  114,
+                  105,
+                  98,
+                  117,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign"
+              },
+              {
+                "kind": "account",
+                "path": "buyer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "organizerStats",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  103,
+                  97,
+                  110,
+                  105,
+                  122,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign.organizer",
+                "account": "campaign"
+              }
+            ]
+          }
+        },
+        {
+          "name": "buyerStats",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "buyer"
+              }
+            ]
+          }
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "withdrawBeforeFill",
+      "docs": [
+        "成团前买家退出,全额退回"
+      ],
+      "discriminator": [
+        112,
+        68,
+        187,
+        207,
+        233,
+        102,
+        128,
+        167
+      ],
+      "accounts": [
+        {
+          "name": "buyer",
+          "docs": [
+            "买家本人"
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "campaign",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  109,
+                  112,
+                  97,
+                  105,
+                  103,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign.organizer",
+                "account": "campaign"
+              },
+              {
+                "kind": "account",
+                "path": "campaign.campaignId",
+                "account": "campaign"
+              }
+            ]
+          }
+        },
+        {
+          "name": "escrow",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  101,
+                  115,
+                  99,
+                  114,
+                  111,
+                  119
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign"
+              }
+            ]
+          }
+        },
+        {
+          "name": "contribution",
+          "docs": [
+            "名额凭证:种子里有买家地址,不能退别人的。退出时关闭,租金还给买家"
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  116,
+                  114,
+                  105,
+                  98,
+                  117,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign"
+              },
+              {
+                "kind": "account",
+                "path": "buyer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "buyerStats",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  117,
+                  121,
+                  101,
+                  114
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "buyer"
+              }
+            ]
+          }
         }
       ],
       "args": []
     }
   ],
   "accounts": [
+    {
+      "name": "buyerStats",
+      "discriminator": [
+        99,
+        111,
+        219,
+        74,
+        172,
+        73,
+        248,
+        140
+      ]
+    },
     {
       "name": "campaign",
       "discriminator": [
@@ -901,6 +1423,19 @@ export type Dropsafe = {
         218,
         155
       ]
+    },
+    {
+      "name": "organizerStats",
+      "discriminator": [
+        133,
+        62,
+        23,
+        127,
+        40,
+        14,
+        217,
+        218
+      ]
     }
   ],
   "errors": [
@@ -911,190 +1446,275 @@ export type Dropsafe = {
     },
     {
       "code": 6001,
+      "name": "descriptionTooLong",
+      "msg": "Description must be 280 characters or fewer"
+    },
+    {
+      "code": 6002,
+      "name": "imageUrlTooLong",
+      "msg": "Image URL must be 200 bytes or fewer"
+    },
+    {
+      "code": 6003,
       "name": "invalidPrice",
       "msg": "Price per person must be greater than 0"
     },
     {
-      "code": 6002,
+      "code": 6004,
       "name": "invalidTargetCount",
       "msg": "Target count must be greater than 0"
     },
     {
-      "code": 6003,
+      "code": 6005,
       "name": "deadlineNotInFuture",
       "msg": "Deadline must be in the future"
     },
     {
-      "code": 6004,
-      "name": "notFundraising",
-      "msg": "Campaign is not accepting contributions"
-    },
-    {
-      "code": 6005,
-      "name": "deadlinePassed",
-      "msg": "The campaign deadline has passed"
-    },
-    {
       "code": 6006,
-      "name": "campaignFull",
-      "msg": "The campaign is already full"
+      "name": "fundraisingTooLong",
+      "msg": "Fundraising can last at most 90 days"
     },
     {
       "code": 6007,
-      "name": "campaignStillActive",
-      "msg": "The campaign is still active; refunds open after the deadline"
-    },
-    {
-      "code": 6008,
-      "name": "targetAlreadyReached",
-      "msg": "The campaign reached its target, so refunds are not available"
-    },
-    {
-      "code": 6009,
-      "name": "notOrganizer",
-      "msg": "Only the organizer can do this"
-    },
-    {
-      "code": 6010,
-      "name": "targetNotReached",
-      "msg": "The campaign has not reached its target"
-    },
-    {
-      "code": 6011,
-      "name": "alreadyReleased",
-      "msg": "Funds have already been released"
-    },
-    {
-      "code": 6012,
-      "name": "mathOverflow",
-      "msg": "Arithmetic overflow"
-    },
-    {
-      "code": 6013,
       "name": "invalidDeliveryDeadline",
       "msg": "The shipping deadline must be after the campaign deadline"
     },
     {
+      "code": 6008,
+      "name": "deliveryTooLong",
+      "msg": "The shipping period can last at most 365 days"
+    },
+    {
+      "code": 6009,
+      "name": "notFundraising",
+      "msg": "Campaign is not accepting contributions"
+    },
+    {
+      "code": 6010,
+      "name": "deadlinePassed",
+      "msg": "The campaign deadline has passed"
+    },
+    {
+      "code": 6011,
+      "name": "campaignFull",
+      "msg": "The campaign is already full"
+    },
+    {
+      "code": 6012,
+      "name": "notOrganizer",
+      "msg": "Only the organizer can do this"
+    },
+    {
+      "code": 6013,
+      "name": "campaignStillActive",
+      "msg": "Refunds open after the campaign deadline"
+    },
+    {
       "code": 6014,
-      "name": "invalidDisputeDeadline",
-      "msg": "The dispute deadline must be after the shipping deadline"
+      "name": "deliveryDeadlineNotReached",
+      "msg": "Refunds open after the shipping deadline if the organizer has not withdrawn"
     },
     {
       "code": 6015,
+      "name": "refundNotAvailable",
+      "msg": "This campaign is not in a refundable state"
+    },
+    {
+      "code": 6016,
+      "name": "cannotCancel",
+      "msg": "Only a fundraising campaign can be cancelled, before its deadline"
+    },
+    {
+      "code": 6017,
+      "name": "noBond",
+      "msg": "This campaign has no organizer bond"
+    },
+    {
+      "code": 6018,
+      "name": "bondNotReclaimable",
+      "msg": "The bond can be reclaimed only after the campaign failed, was abandoned or was cancelled"
+    },
+    {
+      "code": 6019,
+      "name": "bondAlreadyReclaimed",
+      "msg": "The bond has already been reclaimed"
+    },
+    {
+      "code": 6020,
+      "name": "targetNotReached",
+      "msg": "The campaign has not reached its target"
+    },
+    {
+      "code": 6021,
+      "name": "alreadyReleased",
+      "msg": "The upfront payment has already been released"
+    },
+    {
+      "code": 6022,
       "name": "deliveryDeadlinePassed",
       "msg": "The shipping deadline has passed, so the organizer can no longer withdraw"
     },
     {
-      "code": 6016,
-      "name": "notDelivering",
-      "msg": "The organizer has not withdrawn yet, so there is no delivery to confirm"
+      "code": 6023,
+      "name": "notActive",
+      "msg": "The organizer has not released the upfront payment yet"
     },
     {
-      "code": 6017,
-      "name": "deliveryDeadlineNotReached",
-      "msg": "You can report non-delivery only after the shipping deadline"
+      "code": 6024,
+      "name": "seatAlreadyDecided",
+      "msg": "This seat has already been confirmed or reported"
     },
     {
-      "code": 6018,
-      "name": "disputeWindowClosed",
-      "msg": "The dispute window has closed"
+      "code": 6025,
+      "name": "appealWindowClosed",
+      "msg": "The appeal window has closed"
     },
     {
-      "code": 6019,
-      "name": "disputeWindowOpen",
-      "msg": "The organizer can claim unconfirmed shares only after the dispute window closes"
+      "code": 6026,
+      "name": "tooEarlyToReport",
+      "msg": "Non-delivery can be reported only after the shipping deadline"
     },
     {
-      "code": 6020,
+      "code": 6027,
+      "name": "seatNotSettleable",
+      "msg": "This seat cannot be settled until the buyer confirms or the appeal window closes"
+    },
+    {
+      "code": 6028,
+      "name": "notFinalizable",
+      "msg": "This campaign's outcome is not decided yet"
+    },
+    {
+      "code": 6029,
+      "name": "alreadyFinalized",
+      "msg": "This campaign has already been finalized"
+    },
+    {
+      "code": 6030,
+      "name": "insufficientEscrow",
+      "msg": "The escrow does not hold enough funds for this payment"
+    },
+    {
+      "code": 6031,
       "name": "wrongBuyer",
       "msg": "This contribution does not belong to this buyer"
+    },
+    {
+      "code": 6032,
+      "name": "mathOverflow",
+      "msg": "Arithmetic overflow"
     }
   ],
   "types": [
     {
+      "name": "buyerStats",
+      "docs": [
+        "买家的链上记录"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "buyer",
+            "type": "pubkey"
+          },
+          {
+            "name": "campaignsJoined",
+            "type": "u64"
+          },
+          {
+            "name": "seatsConfirmed",
+            "type": "u64"
+          },
+          {
+            "name": "seatsReported",
+            "type": "u64"
+          },
+          {
+            "name": "seatsRefunded",
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
       "name": "campaign",
       "docs": [
-        "一次团购活动。任何人都能读取,只有本程序能修改。"
+        "一次团购活动"
       ],
       "type": {
         "kind": "struct",
         "fields": [
           {
             "name": "organizer",
-            "docs": [
-              "团长的钱包地址"
-            ],
             "type": "pubkey"
           },
           {
             "name": "campaignId",
-            "docs": [
-              "团长自选的活动编号,用来区分同一团长的多个活动"
-            ],
             "type": "u64"
           },
           {
             "name": "title",
-            "docs": [
-              "活动名称"
-            ],
             "type": "string"
           },
           {
-            "name": "pricePerPersonLamports",
+            "name": "description",
+            "type": "string"
+          },
+          {
+            "name": "imageUrl",
+            "type": "string"
+          },
+          {
+            "name": "price",
             "docs": [
-              "每人需要支付的金额(单位 lamports,1 SOL = 10 亿 lamports)"
+              "每人金额(lamports)"
             ],
             "type": "u64"
           },
           {
             "name": "targetCount",
-            "docs": [
-              "目标人数,达到后团长才能提取"
-            ],
             "type": "u32"
           },
           {
-            "name": "contributorCount",
-            "docs": [
-              "当前参与人数。退款时不减少,这样已失败的活动不可能\"变回\"达标"
-            ],
+            "name": "joinedCount",
             "type": "u32"
           },
           {
-            "name": "deadlineUnixTs",
+            "name": "deadline",
             "docs": [
-              "截止时间(Unix 时间戳,单位秒)"
+              "募集截止时间"
             ],
             "type": "i64"
           },
           {
-            "name": "deliveryDeadlineUnixTs",
+            "name": "deliveryDeadline",
             "docs": [
-              "发货期限:团长必须在此之前提取首款并发货。",
-              "过了这个时间,买家可以报告\"未收到\"取回尾款"
+              "发货期限"
             ],
             "type": "i64"
           },
           {
-            "name": "disputeDeadlineUnixTs",
+            "name": "appealEnd",
             "docs": [
-              "申诉截止时间:过了这个时间,没有异议的尾款才能由团长领取"
+              "申诉截止时间 = delivery_deadline + APPEAL_WINDOW,创建时算好存下来"
             ],
             "type": "i64"
           },
           {
-            "name": "settledCount",
-            "docs": [
-              "已结算尾款的买家人数,全部结算后活动变为 Completed"
-            ],
-            "type": "u32"
+            "name": "tier",
+            "type": {
+              "defined": {
+                "name": "tier"
+              }
+            }
           },
           {
             "name": "status",
-            "docs": [
-              "活动状态"
-            ],
             "type": {
               "defined": {
                 "name": "campaignStatus"
@@ -1102,17 +1722,33 @@ export type Dropsafe = {
             }
           },
           {
-            "name": "bump",
-            "docs": [
-              "Campaign PDA 的 bump,之后校验地址时不用重新计算"
-            ],
-            "type": "u8"
+            "name": "upfrontReleased",
+            "type": "bool"
           },
           {
-            "name": "escrowBump",
+            "name": "bondTotal",
             "docs": [
-              "Escrow PDA 的 bump"
+              "创建时存入的保证金总额"
             ],
+            "type": "u64"
+          },
+          {
+            "name": "bondReclaimed",
+            "type": "bool"
+          },
+          {
+            "name": "seatsResolved",
+            "docs": [
+              "已结算的名额数"
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "finalized",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
             "type": "u8"
           }
         ]
@@ -1130,13 +1766,22 @@ export type Dropsafe = {
             "name": "fundraising"
           },
           {
+            "name": "funded"
+          },
+          {
+            "name": "active"
+          },
+          {
             "name": "failed"
           },
           {
-            "name": "delivering"
+            "name": "abandoned"
           },
           {
-            "name": "completed"
+            "name": "cancelled"
+          },
+          {
+            "name": "closed"
           }
         ]
       }
@@ -1144,29 +1789,125 @@ export type Dropsafe = {
     {
       "name": "contribution",
       "docs": [
-        "买家的参与凭证。每个买家在每个活动里只有一个,既防止重复参与,也记录可退金额。"
+        "买家的名额凭证,结算、退款、退出时关闭,租金退还给买家"
       ],
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "campaign",
-            "docs": [
-              "所属活动"
-            ],
-            "type": "pubkey"
-          },
-          {
             "name": "buyer",
-            "docs": [
-              "买家钱包地址"
-            ],
             "type": "pubkey"
           },
           {
             "name": "amount",
+            "type": "u64"
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "contributionStatus"
+              }
+            }
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "contributionStatus",
+      "docs": [
+        "名额状态"
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "paid"
+          },
+          {
+            "name": "confirmed"
+          },
+          {
+            "name": "reported"
+          }
+        ]
+      }
+    },
+    {
+      "name": "escrow",
+      "docs": [
+        "托管金库:存放买家付款和团长保证金。它归本程序所有,没有私钥。"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "organizerStats",
+      "docs": [
+        "团长的链上记录"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "organizer",
+            "type": "pubkey"
+          },
+          {
+            "name": "campaignsCreated",
+            "type": "u64"
+          },
+          {
+            "name": "campaignsFailed",
+            "type": "u64"
+          },
+          {
+            "name": "campaignsAbandoned",
+            "type": "u64"
+          },
+          {
+            "name": "campaignsCancelled",
+            "type": "u64"
+          },
+          {
+            "name": "shielded",
+            "type": {
+              "defined": {
+                "name": "tierStats"
+              }
+            }
+          },
+          {
+            "name": "standard",
+            "type": {
+              "defined": {
+                "name": "tierStats"
+              }
+            }
+          },
+          {
+            "name": "trust",
+            "type": {
+              "defined": {
+                "name": "tierStats"
+              }
+            }
+          },
+          {
+            "name": "totalPaidToOrganizerLamports",
             "docs": [
-              "实际支付的金额,退款时按此金额退回"
+              "实际付给团长的金额,不含退还的保证金"
             ],
             "type": "u64"
           },
@@ -1178,17 +1919,57 @@ export type Dropsafe = {
       }
     },
     {
-      "name": "escrow",
+      "name": "tier",
       "docs": [
-        "托管金库:买家的 SOL 存放在这个账户的余额里。",
-        "它归本程序所有,没有私钥,团长也无法直接转走,只有程序按规则才能动用。"
+        "保障档位,创建后不可修改"
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "shielded"
+          },
+          {
+            "name": "standard"
+          },
+          {
+            "name": "trust"
+          }
+        ]
+      }
+    },
+    {
+      "name": "tierStats",
+      "docs": [
+        "团长在某一档位下的记录"
       ],
       "type": {
         "kind": "struct",
         "fields": [
           {
-            "name": "bump",
-            "type": "u8"
+            "name": "funded",
+            "type": "u64"
+          },
+          {
+            "name": "seatsConfirmed",
+            "docs": [
+              "买家主动确认的名额"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "seatsUnconfirmed",
+            "docs": [
+              "申诉期结束仍无回应的名额"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "seatsReported",
+            "docs": [
+              "买家报告未收到的名额"
+            ],
+            "type": "u64"
           }
         ]
       }
@@ -1196,28 +1977,29 @@ export type Dropsafe = {
   ],
   "constants": [
     {
+      "name": "buyerSeed",
+      "type": "bytes",
+      "value": "[98, 117, 121, 101, 114]"
+    },
+    {
       "name": "campaignSeed",
-      "docs": [
-        "Campaign PDA 的种子前缀"
-      ],
       "type": "bytes",
       "value": "[99, 97, 109, 112, 97, 105, 103, 110]"
     },
     {
       "name": "contributionSeed",
-      "docs": [
-        "Contribution(买家参与凭证)PDA 的种子前缀"
-      ],
       "type": "bytes",
       "value": "[99, 111, 110, 116, 114, 105, 98, 117, 116, 105, 111, 110]"
     },
     {
       "name": "escrowSeed",
-      "docs": [
-        "Escrow(托管金库)PDA 的种子前缀"
-      ],
       "type": "bytes",
       "value": "[101, 115, 99, 114, 111, 119]"
+    },
+    {
+      "name": "organizerSeed",
+      "type": "bytes",
+      "value": "[111, 114, 103, 97, 110, 105, 122, 101, 114]"
     }
   ]
 };

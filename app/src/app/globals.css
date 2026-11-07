@@ -205,3 +205,18 @@ body {
   background: rgb(31 29 26 / 0.5);
   backdrop-filter: none;
 }
+
+.btn-neutral {
+  background: var(--color-surface);
+  color: var(--color-ink);
+  border: 1.5px solid #8a8173;
+  border-radius: 16px;
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+.btn-neutral:hover:not(:disabled) {
+  background: var(--color-line);
+}
+.btn-neutral:disabled {
+  opacity: 0.6;
+}
