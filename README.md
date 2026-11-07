@@ -2,6 +2,8 @@
 
 **On-chain escrow for group buys on Solana.** Built for the MLH Solana Hackathon (Best Beginner Hack, DeFi Track).
 
+**Live demo (Solana Devnet):** https://dropsafe-three.vercel.app
+
 Devnet program: [`6KcTuoAX6u5SRdX563VhbrXWiBrMwAfGxST5ud9RaQgX`](https://explorer.solana.com/address/6KcTuoAX6u5SRdX563VhbrXWiBrMwAfGxST5ud9RaQgX?cluster=devnet)
 
 ## The problem

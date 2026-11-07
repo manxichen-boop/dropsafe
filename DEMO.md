@@ -5,7 +5,7 @@
 ## 录制前准备(提前 15 分钟)
 
 - Phantom 打开 Testnet Mode,选 Solana Devnet。准备 2 个账户(Account 1 当团长,Account 2 当买家),各有至少 1 SOL。可在 https://faucet.solana.com 领取。
-- 用 `npm run dev` 运行时,开发模式的小图标会出现在左下角。录制最好用已部署的线上地址,或者 `npm run build && npm start`。
+- 录制用线上地址 https://dropsafe-three.vercel.app 。首次打开时需要在 Phantom 里批准连接这个网站。
 - **提前创建一个"失败活动"**:目标 3 人、截止时间约 5 分钟、用 Account 2 参与一次。这样录制到退款环节时它刚好已过期,不用现场等。
 - 把"达标提取"所需的活动在录制中现场创建(目标 1 人,截止时间选 1 hour)。
 - 钱包弹窗出现后要在 30 秒内确认。拖太久交易会过期,页面会提示重试。
