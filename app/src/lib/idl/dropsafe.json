@@ -1597,6 +1597,11 @@
       "code": 6032,
       "name": "MathOverflow",
       "msg": "Arithmetic overflow"
+    },
+    {
+      "code": 6033,
+      "name": "OrganizerCannotJoin",
+      "msg": "The organizer cannot join their own group buy"
     }
   ],
   "types": [

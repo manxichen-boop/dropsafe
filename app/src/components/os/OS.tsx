@@ -57,6 +57,9 @@ interface OSValue {
   done: (text: string, signature?: string) => Promise<boolean>;
   fail: (error: FriendlyError) => Promise<boolean>;
   closeDialog: (result: boolean) => void;
+  /** 团购窗口读到商品名后登记在这里,窗口标题和菜单用它代替地址 */
+  campaignTitles: Record<string, string>;
+  setCampaignTitle: (address: string, title: string) => void;
 }
 
 const OSContext = createContext<OSValue | null>(null);
@@ -111,6 +114,10 @@ export function OSProvider({ children }: { children: ReactNode }) {
   const [windows, setWindows] = useState<OSWindow[]>([]);
   const [filter, setFilter] = useState<TierName | "all">("all");
   const [dialog, setDialog] = useState<DialogState | null>(null);
+  const [campaignTitles, setCampaignTitles] = useState<Record<string, string>>({});
+  const setCampaignTitle = useCallback((address: string, title: string) => {
+    setCampaignTitles((prev) => (prev[address] === title ? prev : { ...prev, [address]: title }));
+  }, []);
   const windowsRef = useRef(windows);
   // 同步更新引用:连着调用 close 和 open 时,第二步要看到第一步的结果
   const commit = useCallback((next: OSWindow[]) => {
@@ -147,8 +154,8 @@ export function OSProvider({ children }: { children: ReactNode }) {
       }
       // 新窗口在上一个窗口的位置向右下偏移 24px
       const last = list[list.length - 1];
-      // 第一个窗口放在两列图标的右边,图标多到换列时也不会被挡住
-      const start = last ? { x: last.x + 24, y: last.y + 24 } : { x: 212, y: 16 };
+      // 第一个窗口放在左边那列图标的右边
+      const start = last ? { x: last.x + 24, y: last.y + 24 } : { x: 124, y: 16 };
       const pos = savedPosition(id) ?? start;
       const next = [...list, { id, kind, param, x: pos.x, y: pos.y, opener }];
       commit(next);
@@ -201,8 +208,8 @@ export function OSProvider({ children }: { children: ReactNode }) {
   );
 
   const value = useMemo(
-    () => ({ windows, open, close, focus, move, commitPosition, filter, setFilter, dialog, confirm, done, fail, closeDialog }),
-    [windows, open, close, focus, move, commitPosition, filter, dialog, confirm, done, fail, closeDialog]
+    () => ({ windows, open, close, focus, move, commitPosition, filter, setFilter, dialog, confirm, done, fail, closeDialog, campaignTitles, setCampaignTitle }),
+    [windows, open, close, focus, move, commitPosition, filter, dialog, confirm, done, fail, closeDialog, campaignTitles, setCampaignTitle]
   );
   return <OSContext.Provider value={value}>{children}</OSContext.Provider>;
 }

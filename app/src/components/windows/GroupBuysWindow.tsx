@@ -2,7 +2,17 @@
 
 import { useCallback, useEffect, useState } from "react";
 import type { PublicKey } from "@solana/web3.js";
-import { displayStatus, formatCountdown, formatSol, nextDeadline, TIERS, tierOf, type Campaign, type TierName } from "@/lib/campaign";
+import {
+  displayStatus,
+  formatCountdown,
+  formatSol,
+  nextDeadline,
+  TIERS,
+  tierOf,
+  type Campaign,
+  type DisplayStatus,
+  type TierName,
+} from "@/lib/campaign";
 import { chainRead } from "@/lib/chain";
 import { useI18n } from "@/lib/i18n";
 import { seatsByCampaign, useDropsafe } from "@/lib/program";
@@ -16,6 +26,22 @@ import { useNow } from "@/components/useNow";
 type Row = { publicKey: PublicKey; account: Campaign };
 type View = "list" | "icons";
 
+// 列表分三组:募集中 → 等待收货 → 已结束。组内保持新的在前
+const GROUP_OF: Record<DisplayStatus, 0 | 1 | 2> = {
+  open: 0,
+  funded: 1,
+  delivering: 1,
+  appeal: 1,
+  settling: 1,
+  failed: 2,
+  abandoned: 2,
+  cancelled: 2,
+  closed: 2,
+};
+
+// 开发时留下的测试活动删不掉:标题以 test 开头(不分大小写)的不显示,用网址仍可直接打开
+const isTestListing = (title: string) => /^\s*test/i.test(title);
+
 export function GroupBuysWindow() {
   const program = useDropsafe();
   const now = useNow();
@@ -25,6 +51,7 @@ export function GroupBuysWindow() {
   const [buyers, setBuyers] = useState<Record<string, string[]>>({});
   const [failed, setFailed] = useState(false);
   const [view, setView] = useState<View>("list");
+  const [showEnded, setShowEnded] = useState(false);
 
   const load = useCallback(async () => {
     setFailed(false);
@@ -33,8 +60,7 @@ export function GroupBuysWindow() {
         chainRead("campaigns", () => program.account.campaign.all()),
         chainRead("seats", () => program.account.contribution.all()),
       ]);
-      // 开发时留下的测试活动删不掉,这里隐藏,用网址仍可直接打开
-      const visible = campaigns.filter((row) => !row.account.title.startsWith("Test:"));
+      const visible = campaigns.filter((row) => !isTestListing(row.account.title));
       setRows(visible.sort((a, b) => b.account.campaignId.cmp(a.account.campaignId)));
       const grouped = seatsByCampaign(campaigns.map((row) => row.publicKey), seats);
       setBuyers(Object.fromEntries(Object.entries(grouped).map(([k, list]) => [k, list.map((seat) => seat.account.buyer.toBase58())])));
@@ -48,7 +74,11 @@ export function GroupBuysWindow() {
     load();
   }, [load]);
 
-  const shown = rows?.filter((row) => filter === "all" || tierOf(row.account) === filter);
+  const groupOf = (row: Row) => GROUP_OF[displayStatus(row.account, now)];
+  const inTier = rows?.filter((row) => filter === "all" || tierOf(row.account) === filter);
+  const endedCount = inTier?.filter((row) => groupOf(row) === 2).length ?? 0;
+  // sort 是稳定的,同一组里保持原来"新的在前"的顺序
+  const shown = inTier?.filter((row) => showEnded || groupOf(row) !== 2).sort((a, b) => groupOf(a) - groupOf(b));
   const activate = (address: string, opener: HTMLElement) => open("campaign", address, opener);
 
   const handlers = (address: string) => ({
@@ -85,7 +115,13 @@ export function GroupBuysWindow() {
           ))}
         </div>
       </div>
-      <p className="mt-2 text-[13px]">{t.home.listNote}</p>
+      <div className="mt-2 flex flex-wrap items-center justify-between gap-2 text-[13px]">
+        <p>{t.home.listNote}</p>
+        <label className="flex items-center gap-1.5">
+          <input type="checkbox" checked={showEnded} onChange={(e) => setShowEnded(e.target.checked)} className="accent-ink" />
+          {t.os.groupBuys.showEnded}
+        </label>
+      </div>
 
       {failed && (
         <div className="panel mt-3 border-red">
@@ -103,6 +139,7 @@ export function GroupBuysWindow() {
         </div>
       )}
       {rows && rows.length > 0 && shown?.length === 0 && <p className="py-6 text-center">{t.home.filterEmpty}</p>}
+      {!showEnded && endedCount > 0 && <p className="mt-2 text-[13px]">{t.os.groupBuys.hiddenEnded(endedCount)}</p>}
 
       {view === "list" ? (
         <ul className="mt-3 border-2 border-ink">

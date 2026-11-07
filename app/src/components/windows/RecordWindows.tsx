@@ -92,8 +92,20 @@ export function OrganizerWindow({ address }: { address: string }) {
                 <Line label={o.funded} value={stats[tier].funded.toString()} />
                 <Line label={o.confirmed} value={stats[tier].seatsConfirmed.toString()} />
                 <Line label={o.unconfirmed} value={stats[tier].seatsUnconfirmed.toString()} />
-                <Line label={o.reported} value={stats[tier].seatsReported.toString()} />
+                {tier !== "trust" && <Line label={o.reported} value={stats[tier].seatsReported.toString()} />}
               </dl>
+              {tier === "trust" && (
+                // 无资金保障团的报告没有押金也没经过仲裁,只能说明有人报告,不能当成确认违约
+                <div className="panel mt-2 text-[13px] leading-relaxed">
+                  <p className="font-semibold">
+                    {o.unsecuredReports(
+                      stats.trust.seatsReported.toString(),
+                      stats.trust.seatsConfirmed.add(stats.trust.seatsUnconfirmed).add(stats.trust.seatsReported).toString()
+                    )}
+                  </p>
+                  <p>{o.unverified}</p>
+                </div>
+              )}
             </section>
           ))}
           <p className="mt-3 text-[13px] leading-relaxed">{o.growth}</p>

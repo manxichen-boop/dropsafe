@@ -19,7 +19,8 @@ export const ICON_OF: Record<WindowKind, IconName> = {
   buyer: "buyer",
 };
 
-export function titleFor(win: OSWindow, t: T, campaignTitle?: string): string {
+export function titleFor(win: OSWindow, t: T, campaignTitles: Record<string, string> = {}): string {
+  const campaignTitle = win.param ? campaignTitles[win.param] : undefined;
   switch (win.kind) {
     case "readme":
       return t.os.icons.readme;

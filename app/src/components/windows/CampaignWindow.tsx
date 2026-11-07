@@ -13,6 +13,7 @@ import {
   nextDeadline,
   RECOVERY_PERCENT,
   releaseAmount,
+  remainderOf,
   reportAmount,
   settleAmount,
   shortAddress,
@@ -21,9 +22,10 @@ import {
   type Campaign,
   type Contribution,
   type DisplayStatus,
+  type TierName,
 } from "@/lib/campaign";
 import { chainRead, clearChainCache } from "@/lib/chain";
-import { explorerAddress } from "@/lib/config";
+import { CLUSTER, explorerAddress } from "@/lib/config";
 import { translateError } from "@/lib/errors";
 import { dateLocale, useI18n } from "@/lib/i18n";
 import { buyerStatsPda, contributionPda, escrowPda, organizerStatsPda, seatsByCampaign, useDropsafe } from "@/lib/program";
@@ -57,14 +59,18 @@ function parseAddress(raw: string): PublicKey | null {
 }
 
 // 像素进度条:每一阶段是一格
-function Timeline({ status }: { status: DisplayStatus }) {
+// 无资金保障团成团后团长一次拿走全款,没有尾款结算这一步
+function Timeline({ status, tier }: { status: DisplayStatus; tier: TierName }) {
   const { t } = useI18n();
   const d = t.detail;
   const refundPath = status === "failed" || status === "abandoned" || status === "cancelled";
+  const unsecured = tier === "trust";
   const labels = refundPath
     ? [d.stepRaising, status === "failed" ? d.stepNotFilled : status === "cancelled" ? d.stepCancelled : d.stepAbandoned, d.stepRefund]
-    : [d.stepRaising, d.stepFunded, d.stepReleased, d.stepDone];
-  const positions: Partial<Record<DisplayStatus, number>> = { open: 0, funded: 1, delivering: 2, appeal: 2, settling: 2, closed: 3 };
+    : unsecured
+      ? [d.stepRaising, d.stepFunded, d.stepPaidFull]
+      : [d.stepRaising, d.stepFunded, d.stepReleased, d.stepDone];
+  const positions: Partial<Record<DisplayStatus, number>> = { open: 0, funded: 1, delivering: 2, appeal: 2, settling: 2, closed: unsecured ? 2 : 3 };
   const current = refundPath ? 2 : (positions[status] ?? 0);
   return (
     <ol className="flex border-2 border-ink">
@@ -113,7 +119,7 @@ export function CampaignWindow({ address }: { address: string }) {
   const { setVisible } = useWalletModal();
   const now = useNow();
   const { lang, t } = useI18n();
-  const { open, confirm, done, fail } = useOS();
+  const { open, confirm, done, fail, setCampaignTitle } = useOS();
   const d = t.detail;
   const say = t.os.say;
 
@@ -147,6 +153,7 @@ export function CampaignWindow({ address }: { address: string }) {
       ]);
       if (!alive.current) return;
       setCampaign(account);
+      if (account) setCampaignTitle(address, account.title);
       const mine = seatsByCampaign([campaignKey], allSeats)[campaignKey.toBase58()] ?? [];
       setSeats(mine);
       if (escrowInfo) {
@@ -162,7 +169,7 @@ export function CampaignWindow({ address }: { address: string }) {
       console.warn(e);
       setLoadFailed(true);
     }
-  }, [campaignKey, escrowKey, program]);
+  }, [address, campaignKey, escrowKey, program, setCampaignTitle]);
 
   useEffect(() => {
     refresh();
@@ -225,6 +232,15 @@ export function CampaignWindow({ address }: { address: string }) {
   const timeLabel = (d.timeTo as Partial<Record<DisplayStatus, string>>)[status] ?? d.timeNone;
   const bond = bondHeld(campaign);
   const buyerFunds = Math.max(0, escrowLamports - bond.toNumber());
+  // 团长提走预付款后,托管里买家那部分就是还没结算的尾款。
+  // 金额读自链上余额;只有它正好等于"每个未结算名额的尾款"时才显示百分比
+  const unresolvedSeats = campaign.joinedCount - campaign.seatsResolved;
+  const showsRemainder = "active" in campaign.status && tier !== "trust" && unresolvedSeats > 0;
+  const expectedRemainder = remainderOf(campaign.price).muln(unresolvedSeats).toNumber();
+  const remainderPercent =
+    showsRemainder && buyerFunds === expectedRemainder
+      ? Math.round((buyerFunds * 1000) / (campaign.price.toNumber() * unresolvedSeats)) / 10
+      : null;
   const formatDate = (seconds: number) => new Date(seconds * 1000).toLocaleString(dateLocale(lang));
 
   const organizerStats = organizerStatsPda(organizer);
@@ -307,7 +323,7 @@ export function CampaignWindow({ address }: { address: string }) {
 
   const buttons: React.ReactNode[] = [];
   if (publicKey) {
-    if (status === "open" && !mySeat)
+    if (status === "open" && !mySeat && !isOrganizer)
       buttons.push(
         <button key="join" type="button" onClick={contribute} disabled={pending} className="btn-primary w-full">
           {label(d.join(price))}
@@ -391,14 +407,23 @@ export function CampaignWindow({ address }: { address: string }) {
     return d.settle(formatSol(amount), "reported" in seat.account.status ? d.toBuyer : d.toOrganizer);
   };
 
-  const deadlines = [
+  const deadlines: { label: string; at: number; note?: string }[] = [
     { label: d.joinBy, at: campaign.deadline.toNumber() },
     { label: d.shipBy, at: campaign.deliveryDeadline.toNumber() },
-    { label: d.reportBy, at: campaign.appealEnd.toNumber() },
+    { label: d.reportBy, at: campaign.appealEnd.toNumber(), note: CLUSTER === "devnet" ? d.appealNote : undefined },
   ];
 
   return (
     <div className="space-y-4">
+      {status === "appeal" && (
+        <div role="status" className="border-2 border-ink bg-sun p-3">
+          <p className="pixel-title">{d.appealBanner}</p>
+          <p className="pixel-num text-2xl">{formatCountdown(Math.max(0, campaign.appealEnd.toNumber() - now))}</p>
+          <p className="text-[13px]">
+            {d.appealCloses(formatDate(campaign.appealEnd.toNumber()))} {CLUSTER === "devnet" && d.appealNote}
+          </p>
+        </div>
+      )}
       <div>
         <h2 className="pixel-title break-words text-xl leading-tight">{campaign.title}</h2>
         <p className="mt-1 text-[13px]">{t.status[status]}</p>
@@ -441,7 +466,7 @@ export function CampaignWindow({ address }: { address: string }) {
               <dd className="pixel-num text-xl">{next === null || next <= now ? t.ended : formatCountdown(next - now)}</dd>
             </div>
           </dl>
-          <p className="text-[13px]">{d.lockedUntil(formatDate(campaign.appealEnd.toNumber()))}</p>
+          <p className="text-[13px]">{tier === "trust" ? d.lockedUnsecured : d.lockedUntil(formatDate(campaign.appealEnd.toNumber()))}</p>
           <div>
             <p className="mb-1 text-[13px]">
               {d.seats}: {t.home.joinedCount(campaign.joinedCount, campaign.targetCount)}
@@ -461,11 +486,14 @@ export function CampaignWindow({ address }: { address: string }) {
 
       <section>
         <h3 className="pixel-title mb-1">{d.timeline}</h3>
-        <Timeline status={status} />
+        <Timeline status={status} tier={tier} />
         <dl className="mt-2 space-y-0.5 text-[13px]">
           {deadlines.map((step) => (
             <div key={step.label} className="flex flex-wrap justify-between gap-x-4">
-              <dt className={now >= step.at ? "" : "font-semibold"}>{step.label}</dt>
+              <dt className={now >= step.at ? "" : "font-semibold"}>
+                {step.label}
+                {step.note && <span className="ml-1 font-normal">{step.note}</span>}
+              </dt>
               <dd>{formatDate(step.at)}</dd>
             </div>
           ))}
@@ -481,8 +509,10 @@ export function CampaignWindow({ address }: { address: string }) {
             <dd className="font-semibold">{formatSol(escrowLamports)} SOL</dd>
           </div>
           <div className="flex flex-wrap justify-between gap-x-4">
-            <dt>{d.fundsBuyers}</dt>
-            <dd>{formatSol(buyerFunds)} SOL</dd>
+            <dt>{showsRemainder ? d.fundsRemainder : d.fundsBuyers}</dt>
+            <dd>
+              {formatSol(buyerFunds)} SOL{showsRemainder && remainderPercent !== null ? ` (${remainderPercent}%)` : ""}
+            </dd>
           </div>
           <div className="flex flex-wrap justify-between gap-x-4">
             <dt>{d.fundsBond}</dt>
@@ -541,7 +571,7 @@ export function CampaignWindow({ address }: { address: string }) {
         </section>
       )}
 
-      <div className="os-sticky-bar space-y-2 border-t-2 border-ink pt-3">
+      <div className="os-sticky-bar space-y-2">
         {!publicKey ? (
           <div className="flex flex-wrap items-center justify-between gap-2">
             <span>{d.connect}</span>
@@ -551,6 +581,7 @@ export function CampaignWindow({ address }: { address: string }) {
           </div>
         ) : buttons.length > 0 ? (
           <>
+            {status === "open" && isOrganizer && <p className="text-[13px]">{d.organizerCantJoin}</p>}
             {buttons}
             {pending && <p className="text-[13px]">{t.walletHint}</p>}
           </>

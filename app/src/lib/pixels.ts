@@ -328,3 +328,96 @@ export function drawIcon(name: IconName): Grid {
 
 // 外框平铺用的小图案:硬币、锁、星点。返回 SVG 字符串
 export const FRAME_PATTERN = `<svg xmlns='http://www.w3.org/2000/svg' width='96' height='96' shape-rendering='crispEdges' fill='%23FF6B3D' fill-opacity='0.16'><rect x='10' y='8' width='8' height='2'/><rect x='8' y='10' width='12' height='8'/><rect x='10' y='18' width='8' height='2'/><rect x='58' y='14' width='2' height='6'/><rect x='66' y='14' width='2' height='6'/><rect x='58' y='12' width='10' height='2'/><rect x='55' y='20' width='16' height='10'/><rect x='30' y='56' width='2' height='2'/><rect x='28' y='58' width='6' height='2'/><rect x='30' y='60' width='2' height='2'/><rect x='76' y='66' width='8' height='2'/><rect x='74' y='68' width='12' height='8'/><rect x='76' y='76' width='8' height='2'/><rect x='12' y='82' width='2' height='2'/></svg>`;
+
+// 像素商品图:全部在这里自己画,不用任何官方商品图。
+// 没有图片链接的团购按标题里的关键词挑一种
+export type ProductKind = "album" | "cards" | "sneaker" | "figure" | "book" | "box";
+
+export function productKindOf(title: string): ProductKind {
+  const text = title.toLowerCase();
+  if (/photocard|card|小卡|卡/.test(text)) return "cards";
+  if (/album|cd|vinyl|专辑|唱片/.test(text)) return "album";
+  if (/sneaker|shoe|鞋/.test(text)) return "sneaker";
+  if (/figure|figurine|手办|模型/.test(text)) return "figure";
+  if (/artbook|book|zine|画集|书/.test(text)) return "book";
+  return "box";
+}
+
+export function drawProduct(kind: ProductKind): Grid {
+  const grid = makeGrid(32);
+  const p = painter(grid);
+  switch (kind) {
+    case "album":
+      // 唱片从封套右边露出来
+      p.ell(21, 16, 9, 9, INK);
+      p.ell(21, 16, 8, 8, GRAY);
+      p.ell(21, 16, 3, 3, SUN);
+      p.ell(21, 16, 1, 1, INK);
+      p.rect(3, 5, 20, 22, TOMATO);
+      p.rect(3, 5, 20, 2, TOMATO_LIGHT);
+      p.ell(13, 15, 5, 5, PAPER);
+      p.ell(13, 15, 2, 2, TOMATO_DARK);
+      p.rect(6, 23, 9, 1, PAPER);
+      p.rect(6, 25, 6, 1, PAPER);
+      break;
+    case "cards":
+      // 三张叠放的小卡
+      p.rect(4, 8, 13, 18, SAFE);
+      p.rect(5, 9, 11, 9, PAPER);
+      p.rect(10, 5, 13, 18, SUN);
+      p.rect(11, 6, 11, 9, PAPER);
+      p.rect(16, 10, 13, 18, TOMATO);
+      p.rect(17, 11, 11, 10, PAPER);
+      p.ell(22.5, 15, 2.5, 2.5, TOMATO_LIGHT);
+      p.rect(19, 23, 7, 1, PAPER);
+      p.rect(19, 25, 4, 1, PAPER);
+      break;
+    case "sneaker":
+      p.rect(3, 23, 27, 4, PAPER);
+      p.rect(3, 26, 27, 1, GRAY);
+      p.rect(4, 14, 12, 9, TOMATO);
+      p.rect(8, 10, 8, 4, TOMATO);
+      p.ell(20, 19, 10, 5, TOMATO);
+      p.rect(4, 22, 26, 1, TOMATO_DARK);
+      p.rect(11, 13, 2, 1, PAPER);
+      p.rect(13, 15, 2, 1, PAPER);
+      p.rect(15, 17, 2, 1, PAPER);
+      p.rect(5, 16, 4, 4, SUN);
+      break;
+    case "figure":
+      p.rect(6, 26, 20, 3, GRAY);
+      p.rect(8, 25, 16, 1, LINE);
+      p.rect(12, 17, 8, 8, SAFE);
+      p.rect(9, 18, 3, 5, SAFE);
+      p.rect(20, 18, 3, 5, SAFE);
+      p.ell(16, 11, 6, 6, SUN);
+      p.rect(10, 4, 12, 4, INK);
+      p.rect(13, 11, 1, 2, INK);
+      p.rect(18, 11, 1, 2, INK);
+      p.rect(13, 25, 2, 1, INK);
+      p.rect(17, 25, 2, 1, INK);
+      break;
+    case "book":
+      // 摊开的画集
+      p.rect(2, 8, 14, 19, PAPER);
+      p.rect(16, 8, 14, 19, PAPER);
+      p.rect(15, 7, 2, 21, TOMATO_DARK);
+      p.rect(4, 10, 10, 8, SUN);
+      p.ell(9, 15, 3, 2, SAFE);
+      for (const y of [20, 22, 24]) p.rect(4, y, 10, 1, GRAY);
+      p.rect(18, 10, 10, 10, TOMATO);
+      p.ell(23, 14, 2, 2, PAPER);
+      for (const y of [22, 24]) p.rect(18, y, 10, 1, GRAY);
+      break;
+    case "box":
+      p.rect(4, 11, 24, 17, TOMATO);
+      p.rect(4, 11, 24, 3, TOMATO_LIGHT);
+      p.rect(14, 11, 4, 17, SUN);
+      p.rect(7, 6, 18, 5, TOMATO_DARK);
+      p.rect(14, 6, 4, 5, SUN_DARK);
+      p.rect(7, 22, 5, 1, PAPER);
+      p.rect(7, 24, 3, 1, PAPER);
+      break;
+  }
+  return outline(grid);
+}

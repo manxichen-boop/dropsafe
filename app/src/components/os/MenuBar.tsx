@@ -31,7 +31,7 @@ function useClock(lang: string) {
 }
 
 export function MenuBar() {
-  const { windows, open, close, focus, setFilter } = useOS();
+  const { windows, open, close, focus, setFilter, campaignTitles } = useOS();
   const { lang, setLang, t } = useI18n();
   const { publicKey, disconnect } = useWallet();
   const { setVisible } = useWalletModal();
@@ -50,7 +50,7 @@ export function MenuBar() {
     { label: lang === "en" ? "中文" : "English", run: () => setLang(lang === "en" ? "zh" : "en") },
   ];
   const windowItems: Item[] = windows.length
-    ? windows.map((win) => ({ label: titleFor(win, t), run: () => focus(win.id) }))
+    ? windows.map((win) => ({ label: titleFor(win, t, campaignTitles), run: () => focus(win.id) }))
     : [{ label: t.os.menu.noWindows, run: () => {} }];
   const helpItems: Item[] = [
     { label: t.os.icons.readme, run: () => open("readme") },
@@ -75,7 +75,7 @@ export function MenuBar() {
     ],
     // 菜单内容随窗口、语言和钱包变化
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [t, windows, lang, top?.id]
+    [t, windows, lang, top?.id, campaignTitles]
   );
   // 手机上把所有菜单合成一个汉堡菜单
   const burger: Menu = { key: "burger", label: "≡", items: [...fileItems, ...viewItems, ...windowItems, ...helpItems], className: "md:hidden" };

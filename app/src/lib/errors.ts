@@ -38,6 +38,7 @@ const PROGRAM_ERRORS: Record<string, FriendlyError> = {
   InsufficientEscrow: { zh: "托管余额不足。", en: "The escrow does not hold enough for this payment." },
   WrongBuyer: { zh: "这个名额不属于这位买家。", en: "This seat does not belong to this buyer." },
   MathOverflow: { zh: "金额计算溢出。", en: "The amount calculation overflowed." },
+  OrganizerCannotJoin: { zh: "团长不能参加自己的团购。", en: "The organizer can't join their own group buy." },
   // Anchor 框架错误:名额凭证不存在,说明没参与过或已结算
   AccountNotInitialized: {
     zh: "没有找到这个名额:可能没参与过,或者已经结算了。",

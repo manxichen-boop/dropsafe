@@ -35,6 +35,8 @@ const WIDTHS: Partial<Record<WindowKind, number>> = {
   privacy: 480,
 };
 
+const FIRST_VISIT_KEY = "dropsafe.firstVisit";
+
 const LEFT_ICONS: { icon: IconName; kind: WindowKind }[] = [
   { icon: "readme", kind: "readme" },
   { icon: "groupbuys", kind: "groupbuys" },
@@ -139,15 +141,16 @@ export function Desktop({ children }: { children: ReactNode }) {
   const { windows, close, open, dialog } = useOS();
   const { t } = useI18n();
   const [selected, setSelected] = useState<WindowKind | null>(null);
-  const checkedReadme = useRef(false);
+  const checkedFirstVisit = useRef(false);
 
-  // 首次访问自动打开 Read Me
+  // 首次访问自动打开"团购活动"和"说明",说明在最上面。写入标记后刷新不再重复打开
   useEffect(() => {
-    if (checkedReadme.current) return;
-    checkedReadme.current = true;
+    if (checkedFirstVisit.current) return;
+    checkedFirstVisit.current = true;
     try {
-      if (window.location.pathname === "/" && !window.localStorage.getItem("dropsafe.readme")) {
-        window.localStorage.setItem("dropsafe.readme", "1");
+      if (window.location.pathname === "/" && !window.localStorage.getItem(FIRST_VISIT_KEY)) {
+        window.localStorage.setItem(FIRST_VISIT_KEY, "1");
+        open("groupbuys");
         open("readme");
       }
     } catch {
@@ -175,16 +178,22 @@ export function Desktop({ children }: { children: ReactNode }) {
         <MenuBar />
         <main className="os-desktop" onPointerDown={(e) => e.target === e.currentTarget && setSelected(null)}>
           <Wallpaper />
-          <div className="relative grid h-full grid-cols-3 content-start justify-items-center gap-1 overflow-auto p-2 md:flex md:flex-col md:flex-wrap md:items-start">
+          <div className="relative grid h-full grid-cols-3 content-start justify-items-center gap-1 overflow-auto p-2 md:flex md:w-fit md:flex-col md:flex-nowrap md:items-start md:gap-0">
             {LEFT_ICONS.map(({ icon, kind }) => (
               <IconButton key={kind} icon={icon} kind={kind} selected={selected === kind} onSelect={() => setSelected(kind)} />
             ))}
-            {/* 手机上放进网格,桌面上放到右下角 */}
-            <div className="contents md:absolute md:bottom-2 md:right-2 md:flex md:flex-col">
-              {CORNER_ICONS.map(({ icon, kind }) => (
-                <IconButton key={kind} icon={icon} kind={kind} selected={selected === kind} onSelect={() => setSelected(kind)} />
-              ))}
-            </div>
+            {/* 手机上这两个图标排进网格 */}
+            {CORNER_ICONS.map(({ icon, kind }) => (
+              <div key={kind} className="contents md:hidden">
+                <IconButton icon={icon} kind={kind} selected={selected === kind} onSelect={() => setSelected(kind)} />
+              </div>
+            ))}
+          </div>
+          {/* 桌面上固定在右下角 */}
+          <div className="absolute bottom-2 right-2 hidden flex-col md:flex">
+            {CORNER_ICONS.map(({ icon, kind }) => (
+              <IconButton key={kind} icon={icon} kind={kind} selected={selected === kind} onSelect={() => setSelected(kind)} />
+            ))}
           </div>
           {windows.map((win, i) => (
             <WindowFrame key={win.id} win={win} z={100 + i} active={i === windows.length - 1} />
@@ -200,8 +209,9 @@ export function Desktop({ children }: { children: ReactNode }) {
 
 function WindowFrame({ win, z, active }: { win: OSWindow; z: number; active: boolean }) {
   const { t } = useI18n();
+  const { campaignTitles } = useOS();
   return (
-    <Window win={win} z={z} active={active} title={titleFor(win, t)} icon={ICON_OF[win.kind]} width={WIDTHS[win.kind]}>
+    <Window win={win} z={z} active={active} title={titleFor(win, t, campaignTitles)} icon={ICON_OF[win.kind]} width={WIDTHS[win.kind]}>
       <WindowContent win={win} />
     </Window>
   );

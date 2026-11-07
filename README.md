@@ -20,11 +20,11 @@ Buyers pay into an **escrow account controlled by the program**. It has no priva
 | --- | --- | --- | --- |
 | **Shielded** | `upfront * target_count` as a bond | `upfront * joined_count` | `remainder + upfront` from the bond, which is the full price |
 | **Standard** | Nothing | `upfront * joined_count` | `remainder`, which is 30% |
-| **Trust** | Nothing | `price * joined_count`, which is 100% | Nothing. The report is only recorded |
+| **Unsecured** (`Trust` in the program) | Nothing | `price * joined_count`, which is 100% | Nothing. There is no money-back protection, and the report is only recorded |
 
 Where `upfront = price * 7 / 10` and `remainder = price - upfront`, so the two always add up to exactly `price`.
 
-**The most a buyer can lose = the upfront share minus the bond share.** That is 0% on Shielded, 70% on Standard and 100% on Trust, provided they report during the appeal window.
+**The most a buyer can lose = the upfront share minus the bond share.** That is 0% on Shielded, 70% on Standard and 100% on Unsecured, provided they report during the appeal window.
 
 Whatever the tier, every buyer takes their full payment back when:
 - the group doesn't fill by the deadline,
@@ -59,7 +59,7 @@ flowchart LR
 flowchart TD
     OR[Organizer] -- "Shielded: bond at creation" --> E[(Escrow)]
     BU[Buyers] -- "price on joining" --> E
-    E -- "release_upfront: 70%, or 100% on Trust" --> OR
+    E -- "release_upfront: 70%, or 100% on Unsecured" --> OR
     E -- "refund or leaving: full price" --> BU
     E -- "reclaim_bond: failed, abandoned or cancelled" --> OR
     E -- "settle_seat: confirmed or unanswered" --> OR
@@ -103,14 +103,16 @@ stateDiagram-v2
 ## Rules the program enforces
 
 - Fundraising lasts at most 90 days, and shipping at most 365 days after that.
-- The appeal window is fixed by the program at 72 hours, so an organizer can't shorten it.
+- The appeal window is fixed by the program at 7 days (60 seconds on the Devnet demo build), so an organizer can't shorten it.
+- A buyer can report from the shipping deadline (inclusive) until `appeal_end` (exclusive). At exactly `appeal_end` the window is closed: reports and confirmations fail, and unanswered seats can be settled. The app uses the same rule.
+- An organizer can't join their own group buy. The whole transaction fails, so no seat is created and no money moves.
 - Buyers can't report before the shipping deadline, which gives the organizer time to ship.
 - The remainder reaches the organizer only after the buyer confirms or the appeal window ends.
 - Every payout checks the escrow balance first and goes to an address fixed by the program, so anyone can safely call `settle_seat` and `finalize_campaign`.
 
 ## Threat model
 
-| Threat | Shielded | Standard | Trust |
+| Threat | Shielded | Standard | Unsecured |
 | --- | --- | --- | --- |
 | Abusing deadlines to lock funds for years | Prevented | Prevented | Prevented |
 | Setting an appeal window too short to use | Prevented | Prevented | Prevented |
@@ -124,7 +126,10 @@ stateDiagram-v2
 - **False reports:** on Shielded, an organizer can check each buyer's on-chain record and choose not to ship to a suspicious buyer without losing money. If the organizer ships and the buyer still reports, the organizer loses that seat's money. The planned answer is a jury.
 - **Reputation:** records are public and the organizer can't delete them, but extra wallets can inflate them. Treat them as a reference only.
 - **Upgrades:** the deployer's wallet currently holds the upgrade authority, so it could change the rules. This must move to a multisig or be frozen before mainnet.
-- **A filled group proves nothing:** because of extra wallets, a full group doesn't show real demand.
+- **A filled group proves nothing:** because of extra wallets, a full group doesn't show real demand. The organizer's own wallet can't take a seat, but other wallets they control can.
+- **Organizer disappears before the shipping deadline:** buyers can only report after the shipping deadline, so protection starts late. The group buy window shows both the shipping deadline and when reports open.
+- **Malicious reports on Unsecured:** a report costs nothing and nobody adjudicates it, so it can be used to drag down an organizer's record. The organizer profile shows these as "Y of X settled seats reported not received" and says the reports are unverified. A report is not a confirmed failure to deliver.
+- **A buyer misses the appeal window:** a buyer who stays offline for the whole window can't report afterwards. The group buy window shows a countdown during the appeal window, and My Wallet lists seats that can still be reported. Reminders reduce this risk but don't replace reporting.
 
 ## Roadmap
 
@@ -139,6 +144,8 @@ These are planned and not built.
 - **Milestone payouts** with shipping proof hashes, and direct payment to merchants.
 - **USDC** and other tokens.
 - **Image hash checks**, because an image link can change today.
+- **Organizer declares they can't deliver**, which opens refunds for those seats at once instead of waiting for the shipping deadline. It would need the organizer's signature and would work seat by seat.
+- **Appeal reminders** by email or wallet notification. A failed notification would never change the on-chain appeal deadline or any funds.
 
 ## Run it
 
@@ -164,14 +171,14 @@ npm install
 npm test
 ```
 
-This builds with `devnet-demo` and runs 30 tests on a local validator. They take about 4 minutes, because they wait through real deadlines and a real appeal window.
+This runs 4 Rust unit tests twice, once for each build (the appeal-window boundaries at one second before, at and after the deadline), then builds with `devnet-demo` and runs 33 integration tests on a local validator. The integration tests take about 4 minutes, because they wait through real deadlines and a real appeal window.
 
 ### The `devnet-demo` feature
 
-The Devnet deployment is built with the `devnet-demo` cargo feature, which shortens the appeal window from 72 hours to 60 seconds so a full flow can be demonstrated. Nothing else changes. A build without the feature uses 72 hours:
+The Devnet deployment is built with the `devnet-demo` cargo feature, which shortens the appeal window from 7 days to 60 seconds so a full flow can be demonstrated. Nothing else changes. A build without the feature uses 7 days:
 
 ```bash
-anchor build                                   # 72-hour appeal window
+anchor build                                   # 7-day appeal window
 anchor build -- --features devnet-demo         # 60-second appeal window, used on Devnet
 ```
 

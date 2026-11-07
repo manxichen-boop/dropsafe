@@ -2,7 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { isHttpUrl } from "@/lib/campaign";
-import { Lockie } from "./Lockie";
+import { drawProduct, productKindOf } from "@/lib/pixels";
+import { Pixel } from "./Pixel";
 
 // 调色板加灰阶
 const PALETTE: [number, number, number][] = [
@@ -99,10 +100,11 @@ export function DitheredImage({
     img.src = url;
   }, [url, valid, width]);
 
+  // 没有图片或图片打不开时,按标题画一张自制的像素商品图
   if (!valid || mode === "none") {
     return (
-      <div className={`flex items-center justify-center bg-line ${className}`}>
-        <Lockie mood="guarding" size={placeholderSize} decorative />
+      <div role="img" aria-label={alt} className={`flex items-center justify-center bg-line ${className}`}>
+        <Pixel grid={drawProduct(productKindOf(alt))} size={placeholderSize} />
       </div>
     );
   }

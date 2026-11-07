@@ -2,7 +2,9 @@
 
 旁白用英文,方便评委听懂;中文是给你的提示。
 
-网站现在是 **DropSafe OS** 像素桌面:左边是桌面图标,顶部是菜单栏(File / View / Window / Help),每个功能都在一个可以拖动的窗口里打开。双击图标打开窗口,按 Esc 关闭最上面的窗口。
+网站现在是 **DropSafe OS** 像素桌面:左边一列是桌面图标,**Rules** 和 **Privacy & Terms** 在右下角,顶部是菜单栏(File / View / Window / Help),每个功能都在一个可以拖动的窗口里打开。双击图标打开窗口,按 Esc 关闭最上面的窗口。第一次打开网站时会自动打开 **Read Me** 和 **Group Buys**。
+
+三档保障在界面上的名字是 **Shielded / Standard / Unsecured**(中文:全额保障团 / 部分保障团 / 无资金保障团)。**Group Buys** 列表按"募集中 → 等待收货 → 已结束"排序,已结束的默认隐藏,勾选 **Show ended** 才显示。
 
 ## 录制前准备(提前 15 分钟)
 
@@ -26,7 +28,7 @@
 
 ### 0:15–0:35 三档保障(双击 **New Group Buy**,指三档选项;或打开 **Rules** 窗口的对比表)
 
-> "An organizer picks one of three protection levels. Shielded means depositing a bond first, so a buyer who reports non-delivery in time loses nothing. Standard pays 70% up front, so a buyer can lose up to 70%. Trust pays everything up front. Buyers see this before they join."
+> "An organizer picks one of three protection levels. Shielded means depositing a bond first, so a buyer who reports non-delivery in time loses nothing. Standard pays 70% up front, so a buyer can lose up to 70%. Unsecured pays everything up front, with no money-back protection at all. Buyers see this before they join."
 
 ### 0:35–1:00 全额保障团正常交付(**Group Buys** 窗口里打开团购一)
 
@@ -38,7 +40,7 @@
 
 ### 1:00–1:25 团长跑路(打开团购二,切到 C)
 
-点 **I didn't receive my goods. Get 0.1 SOL back**,再点 **Settle this seat**,在 Done 框里点 **View transaction on Solana Explorer**。
+先指窗口顶部的黄色申诉倒计时横幅("If your goods didn't arrive, report it before this")。也可以先打开 **My Wallet**,在 **Can report** 一栏里点进这个团。然后点 **I didn't receive my goods. Get 0.1 SOL back**,再点 **Settle this seat**,在 Done 框里点 **View transaction on Solana Explorer**。
 
 > "Now the organizer took the upfront payment and vanished. After the shipping deadline, the buyer reports it. The bond covers that seat, so the buyer gets the full price back, and the organizer ends up with nothing from it."
 
@@ -48,7 +50,7 @@
 
 ### 1:40–2:00 局限和 Roadmap
 
-> "To be clear about the limits: on Standard a buyer can still lose 70%, on Trust everything. On Shielded, a buyer can falsely report and cost an honest organizer that seat's money. The program is also still upgradeable. Next we plan complaint deposits and a randomly drawn, staked jury. DropSafe: every group buy tells you what you can lose before you join. Thanks!"
+> "To be clear about the limits: on Standard a buyer can still lose 70%, on Unsecured everything. On Shielded, a buyer can falsely report and cost an honest organizer that seat's money. The program is also still upgradeable. Next we plan complaint deposits and a randomly drawn, staked jury. DropSafe: every group buy tells you what you can lose before you join. Thanks!"
 
 ## 评委可能问的问题
 
@@ -62,6 +64,10 @@
 
 **为什么不是到期自动放款?** Solana 程序不能定时运行,所以要有人发一笔结算交易。任何人都可以发,钱只会转到合约固定的地址。
 
-**申诉期为什么只有 60 秒?** 这是 Devnet 演示构建。正式构建是 72 小时,由合约固定,团长改不了。
+**申诉期为什么只有 60 秒?** 这是 Devnet 演示构建。正式构建是 7 天,由合约固定,团长改不了。界面上申诉截止时间旁边也写着这一点。
+
+**团长能不能自己参团凑人数?** 不能用自己的钱包:合约直接拒绝,整笔交易回滚,不会创建名额也不会转账。但团长仍然可以用别的钱包参团,所以成团不等于真实需求,这一点写在威胁模型里。
+
+**为什么叫"无资金保障团"?** 这一档成团后全款直接给团长,买家报告未收到也拿不回钱,只留下记录。改名是为了不让人误以为"信任"代表平台担保。团长主页上这类报告标注为"未经仲裁",不算确认违约。
 
 **为什么做成像素桌面?** 每个功能是一个独立窗口,团购详情、托管余额和链上动态可以并排打开对照。界面只改了前端,合约和 v2 一样。

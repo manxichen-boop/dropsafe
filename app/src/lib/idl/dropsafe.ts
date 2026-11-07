@@ -1603,6 +1603,11 @@ export type Dropsafe = {
       "code": 6032,
       "name": "mathOverflow",
       "msg": "Arithmetic overflow"
+    },
+    {
+      "code": 6033,
+      "name": "organizerCannotJoin",
+      "msg": "The organizer cannot join their own group buy"
     }
   ],
   "types": [
