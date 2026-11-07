@@ -6,6 +6,7 @@
 
 - Phantom 打开 Testnet Mode,选 Solana Devnet。准备 3 个账户(A 团长,B、C 买家),各有至少 1 SOL。可在 https://faucet.solana.com 领取。
 - 用线上地址录制。第一次打开时要在 Phantom 里批准连接网站。
+- **换账户的步骤:** 只在 Phantom 里切换不够,网站仍会连着原账户。要先在 Phantom 切换账户,再点网站右上角的钱包地址,选 **Disconnect**,然后 **Connect wallet**,在弹窗里批准。视频里这段可以剪掉。
 - 钱包弹窗出现后要在 30 秒内确认。拖太久交易会过期,页面会提示重试。如果弹窗没出现,点工具栏的 Phantom 图标,或者刷新页面重试。
 - Devnet 版本的申诉期是 60 秒。创建页的截止时间选 **2 min**,发货期限选 **Demo: 2 minutes**。
 - 提前准备两个全额保障团(Shielded,目标 2 人,每人 0.1 SOL),都用 A 创建,用 B、C 参与:
