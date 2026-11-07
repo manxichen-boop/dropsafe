@@ -9,7 +9,7 @@ import { formatSol, isHttpUrl, MAX_CREATE_TEXT_BYTES, solToLamports, TIERS, upfr
 import { clearChainCache } from "@/lib/chain";
 import { translateError } from "@/lib/errors";
 import { useI18n } from "@/lib/i18n";
-import { campaignPda, escrowPda, organizerStatsPda, useDropsafe } from "@/lib/program";
+import { campaignExtPda, campaignPda, escrowPda, organizerStatsExtPda, organizerStatsPda, useDropsafe } from "@/lib/program";
 import { TierShield } from "@/components/os/icons";
 import { useOS, type OSWindow } from "@/components/os/OS";
 
@@ -23,6 +23,14 @@ const DEADLINE_PRESETS = [
   { key: "1h", seconds: 3600 },
   { key: "1d", seconds: DAY },
   { key: "1w", seconds: 7 * DAY },
+] as const;
+
+// 最长运输时间:团长发货时填的 ETA 不能超过发货时间加这个值。合约上限 60 天
+const TRANSIT_CHOICES = [
+  { key: "demo", seconds: 60 },
+  { key: "domestic", seconds: 7 * DAY },
+  { key: "international", seconds: 21 * DAY },
+  { key: "freight", seconds: 45 * DAY },
 ] as const;
 
 const PRODUCT_TYPES = [
@@ -78,6 +86,7 @@ export function NewGroupBuyWindow({ win }: { win: OSWindow }) {
   const [target, setTarget] = useState("3");
   const [deadline, setDeadline] = useState("");
   const [delivery, setDelivery] = useState("");
+  const [transit, setTransit] = useState<number>(7 * DAY);
   const [touched, setTouched] = useState<Record<string, boolean>>({});
   const [submitting, setSubmitting] = useState(false);
 
@@ -138,12 +147,14 @@ export function NewGroupBuyWindow({ win }: { win: OSWindow }) {
       const campaignId = new BN(Date.now());
       const campaign = campaignPda(publicKey, campaignId);
       const signature = await program.methods
-        .createCampaign(campaignId, title.trim(), description.trim(), image.trim(), lamports!, count, new BN(deadlineSeconds), new BN(deliverySeconds), { [tier]: {} } as never)
+        .createCampaign(campaignId, title.trim(), description.trim(), image.trim(), lamports!, count, new BN(deadlineSeconds), new BN(deliverySeconds), { [tier]: {} } as never, new BN(transit))
         .accountsPartial({
           organizer: publicKey,
           campaign,
           escrow: escrowPda(campaign),
           organizerStats: organizerStatsPda(publicKey),
+          campaignExt: campaignExtPda(campaign),
+          organizerStatsExt: organizerStatsExtPda(publicKey),
           systemProgram: SystemProgram.programId,
         })
         .rpc();
@@ -254,6 +265,25 @@ export function NewGroupBuyWindow({ win }: { win: OSWindow }) {
           ))}
         </div>
       </Field>
+
+      <fieldset>
+        <legend className="pixel-title mb-1">{t.create.transit}</legend>
+        <div role="radiogroup" className="flex flex-wrap gap-1">
+          {TRANSIT_CHOICES.map((choice) => (
+            <button
+              key={choice.key}
+              type="button"
+              role="radio"
+              aria-checked={transit === choice.seconds}
+              className={`${chip} ${transit === choice.seconds ? "!bg-ink text-paper" : ""}`}
+              onClick={() => setTransit(choice.seconds)}
+            >
+              {t.create.transitChoices[choice.key]}
+            </button>
+          ))}
+        </div>
+        <p className="mt-1 text-[13px]">{t.create.transitHint}</p>
+      </fieldset>
 
       <div className="panel flex flex-wrap items-center justify-between gap-2">
         <span className="pixel-title">{t.create.bondLabel}</span>

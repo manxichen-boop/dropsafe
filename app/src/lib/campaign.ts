@@ -6,6 +6,9 @@ export type Campaign = IdlAccounts<Dropsafe>["campaign"];
 export type Contribution = IdlAccounts<Dropsafe>["contribution"];
 export type OrganizerStats = IdlAccounts<Dropsafe>["organizerStats"];
 export type BuyerStats = IdlAccounts<Dropsafe>["buyerStats"];
+export type CampaignExt = IdlAccounts<Dropsafe>["campaignExt"];
+export type Shipment = IdlAccounts<Dropsafe>["shipment"];
+export type OrganizerStatsExt = IdlAccounts<Dropsafe>["organizerStatsExt"];
 
 export type TierName = "shielded" | "standard" | "trust";
 export const TIERS: TierName[] = ["shielded", "standard", "trust"];
@@ -122,6 +125,23 @@ export function formatCountdown(secondsLeft: number): string {
 export const shortAddress = (address: string) => `${address.slice(0, 4)}…${address.slice(-4)}`;
 export const isHttpUrl = (value: string) => /^https?:\/\/\S+$/i.test(value.trim());
 
-// 一笔创建交易最多能放的文本字节数(测试里实测:1232 - 359,留一点余量)
-export const MAX_CREATE_TEXT_BYTES = 860;
+// 一笔创建交易最多能放的文本字节数(v2.2 测试里实测:1232 - 433 = 799,留一点余量)
+export const MAX_CREATE_TEXT_BYTES = 790;
 export const utf8Length = (value: string) => new TextEncoder().encode(value).length;
+
+// 和合约的 seat_window 一致:报告窗口从 opens(含)到 closes(不含)。
+// 申诉期长度取自合约创建时存下的 appeal_end - delivery_deadline,所以 Devnet 和正式版不用分开写
+export type SeatWindow = { opens: number; closes: number; shipped: boolean | null; extended: boolean };
+
+export function seatWindow(c: Campaign, hasRules: boolean, shipment: Shipment | null): SeatWindow {
+  const shipBy = c.deliveryDeadline.toNumber();
+  const appeal = c.appealEnd.toNumber() - shipBy;
+  if (!hasRules) return { opens: shipBy, closes: c.appealEnd.toNumber(), shipped: null, extended: false };
+  const shipped = !!shipment?.shipped;
+  const opens = shipped ? shipment!.eta.toNumber() : shipBy;
+  const extended = !!shipment?.extensionUsed;
+  return { opens, closes: opens + appeal + (extended ? appeal : 0), shipped, extended };
+}
+
+export const reportOpen = (w: SeatWindow, now: number) => now >= w.opens && now < w.closes;
+export const appealSeconds = (c: Campaign) => c.appealEnd.toNumber() - c.deliveryDeadline.toNumber();

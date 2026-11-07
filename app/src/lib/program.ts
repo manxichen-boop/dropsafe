@@ -49,6 +49,18 @@ export const organizerStatsPda = (organizer: PublicKey) =>
 export const buyerStatsPda = (buyer: PublicKey) =>
   PublicKey.findProgramAddressSync([Buffer.from("buyer"), buyer.toBuffer()], PROGRAM_ID)[0];
 
+export const campaignExtPda = (campaign: PublicKey) =>
+  PublicKey.findProgramAddressSync([Buffer.from("campaign_ext"), campaign.toBuffer()], PROGRAM_ID)[0];
+
+export const shipmentPda = (campaign: PublicKey, buyer: PublicKey) =>
+  PublicKey.findProgramAddressSync([Buffer.from("shipment"), contributionPda(campaign, buyer).toBuffer()], PROGRAM_ID)[0];
+
+export const organizerStatsExtPda = (organizer: PublicKey) =>
+  PublicKey.findProgramAddressSync([Buffer.from("organizer_stats_ext"), organizer.toBuffer()], PROGRAM_ID)[0];
+
+// 一笔批量发货交易记录的名额数。实测 8 个名额正好放进一笔交易,合约上限也是 8
+export const SHIPMENT_BATCH = 8;
+
 // 名额凭证里没有活动地址,只能用 PDA 反推它属于哪个活动。Devnet 上数量很少,够用
 export function seatsByCampaign<T extends { publicKey: PublicKey; account: { buyer: PublicKey } }>(
   campaigns: PublicKey[],

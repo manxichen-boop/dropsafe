@@ -2,10 +2,10 @@
 
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { PublicKey } from "@solana/web3.js";
-import { formatSol, TIERS, type BuyerStats, type Campaign, type OrganizerStats } from "@/lib/campaign";
+import { formatSol, TIERS, type BuyerStats, type Campaign, type OrganizerStats, type OrganizerStatsExt } from "@/lib/campaign";
 import { chainRead } from "@/lib/chain";
 import { useI18n } from "@/lib/i18n";
-import { buyerStatsPda, contributionPda, organizerStatsPda, useDropsafe } from "@/lib/program";
+import { buyerStatsPda, contributionPda, organizerStatsExtPda, organizerStatsPda, useDropsafe } from "@/lib/program";
 import { DesktopIcon, TierShield } from "@/components/os/icons";
 import { useOS } from "@/components/os/OS";
 
@@ -43,18 +43,21 @@ export function OrganizerWindow({ address }: { address: string }) {
   const { open } = useOS();
   const o = t.organizerPage;
   const [stats, setStats] = useState<OrganizerStats | null | undefined>(undefined);
+  const [extStats, setExtStats] = useState<OrganizerStatsExt | null>(null);
   const [rows, setRows] = useState<{ publicKey: PublicKey; account: Campaign }[]>([]);
   const [failed, setFailed] = useState(false);
 
   const load = useCallback(async () => {
     if (!key) return setStats(null);
     try {
-      const [record, campaigns] = await Promise.all([
+      const [record, ext, campaigns] = await Promise.all([
         program.account.organizerStats.fetchNullable(organizerStatsPda(key)),
+        program.account.organizerStatsExt.fetchNullable(organizerStatsExtPda(key)),
         // organizer 字段紧跟在 8 字节的账户标识后面
         chainRead(`campaigns-of-${address}`, () => program.account.campaign.all([{ memcmp: { offset: 8, bytes: key.toBase58() } }])),
       ]);
       setStats(record);
+      setExtStats(ext);
       setRows(campaigns.sort((a, b) => b.account.campaignId.cmp(a.account.campaignId)));
     } catch (e) {
       console.warn(e);
@@ -81,7 +84,10 @@ export function OrganizerWindow({ address }: { address: string }) {
             <Line label={o.failed} value={stats.campaignsFailed.toString()} />
             <Line label={o.abandoned} value={stats.campaignsAbandoned.toString()} />
             <Line label={o.cancelled} value={stats.campaignsCancelled.toString()} />
+            <Line label={o.missingShipments} value={(extStats?.missingShipmentRecordSeats ?? 0).toString()} />
+            <Line label={o.allReports} value={(extStats?.unverifiedReports ?? 0).toString()} />
           </dl>
+          <p className="mt-2 text-[13px] leading-relaxed">{o.extNote}</p>
           {TIERS.map((tier) => (
             <section key={tier} className="border-b-2 border-ink py-3">
               <h3 className="pixel-title flex items-center gap-2 text-base">

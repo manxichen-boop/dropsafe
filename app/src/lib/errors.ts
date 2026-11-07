@@ -39,6 +39,17 @@ const PROGRAM_ERRORS: Record<string, FriendlyError> = {
   WrongBuyer: { zh: "这个名额不属于这位买家。", en: "This seat does not belong to this buyer." },
   MathOverflow: { zh: "金额计算溢出。", en: "The amount calculation overflowed." },
   OrganizerCannotJoin: { zh: "团长不能参加自己的团购。", en: "The organizer can't join their own group buy." },
+  InvalidMaxTransit: { zh: "最长运输时间必须在 1 秒到 60 天之间。", en: "The longest transit time must be between 1 second and 60 days." },
+  NoShippingRules: { zh: "这个团购创建于发货记录功能上线之前,不能使用这个操作。", en: "This group buy was created before shipment records existed, so this action isn't available." },
+  InvalidShipmentBatch: { zh: "一次要提交 1 到 8 个名额。", en: "A batch must list between 1 and 8 seats." },
+  ShippingClosed: { zh: "只能在成团后、发货期限前提交发货记录。", en: "Shipments can be recorded only after the group fills and before the shipping deadline." },
+  InvalidEta: { zh: "ETA 必须在现在到最长运输时间之内。", en: "The ETA must be between now and the longest transit time." },
+  ShipmentAlreadyRecorded: { zh: "有名额已经提交过发货记录,整批都没有保存。请刷新后重新选择。", en: "A seat already has a shipment record, so nothing in this batch was saved. Refresh and choose again." },
+  InvalidShipmentAccount: { zh: "名额信息不匹配,整批都没有保存。", en: "A seat didn't match this group buy, so nothing in this batch was saved." },
+  SeatWasShipped: { zh: "这个名额有发货记录,请在 ETA 之后报告未收到。", en: "This seat has a shipment record, so report non-delivery after the ETA instead." },
+  SeatNotShipped: { zh: "这个名额没有发货记录,请报告团长逾期未发货。", en: "This seat has no shipment record, so report that it wasn't shipped instead." },
+  ExtensionUsed: { zh: "这个名额已经延长过一次了。", en: "This seat's waiting period has already been extended once." },
+  ExtensionNotAvailable: { zh: "只有在这个名额的报告窗口开启时才能延长。", en: "You can extend only while this seat's report window is open." },
   // Anchor 框架错误:名额凭证不存在,说明没参与过或已结算
   AccountNotInitialized: {
     zh: "没有找到这个名额:可能没参与过,或者已经结算了。",

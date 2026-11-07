@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import BN from "bn.js";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { PublicKey, SystemProgram } from "@solana/web3.js";
@@ -14,6 +15,8 @@ import {
   RECOVERY_PERCENT,
   releaseAmount,
   remainderOf,
+  reportOpen,
+  seatWindow,
   reportAmount,
   settleAmount,
   shortAddress,
@@ -22,13 +25,25 @@ import {
   type Campaign,
   type Contribution,
   type DisplayStatus,
+  type Shipment,
   type TierName,
 } from "@/lib/campaign";
 import { chainRead, clearChainCache } from "@/lib/chain";
 import { CLUSTER, explorerAddress } from "@/lib/config";
 import { translateError } from "@/lib/errors";
 import { dateLocale, useI18n } from "@/lib/i18n";
-import { buyerStatsPda, contributionPda, escrowPda, organizerStatsPda, seatsByCampaign, useDropsafe } from "@/lib/program";
+import {
+  buyerStatsPda,
+  campaignExtPda,
+  contributionPda,
+  escrowPda,
+  organizerStatsExtPda,
+  organizerStatsPda,
+  seatsByCampaign,
+  SHIPMENT_BATCH,
+  shipmentPda,
+  useDropsafe,
+} from "@/lib/program";
 import { DitheredImage } from "@/components/os/DitheredImage";
 import { TierShield } from "@/components/os/icons";
 import { Lockie, type LockieMood } from "@/components/os/Lockie";
@@ -49,6 +64,19 @@ const MOOD: Record<DisplayStatus, LockieMood> = {
 };
 
 type Seat = { publicKey: PublicKey; account: Contribution };
+
+// 物流参考信息只上链哈希。拼上名额地址再哈希,单号本身很难被逐个试出来
+async function referenceHash(text: string, seat: PublicKey): Promise<number[]> {
+  if (!text.trim()) return Array(32).fill(0);
+  const bytes = new TextEncoder().encode(`${text.trim()}|${seat.toBase58()}`);
+  return Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", bytes)));
+}
+
+function toLocalInput(unixSeconds: number): string {
+  const d = new Date(unixSeconds * 1000);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
 
 function parseAddress(raw: string): PublicKey | null {
   try {
@@ -127,6 +155,12 @@ export function CampaignWindow({ address }: { address: string }) {
   const [escrowLamports, setEscrowLamports] = useState(0);
   const [seats, setSeats] = useState<Seat[]>([]);
   const [buyerRecords, setBuyerRecords] = useState<Record<string, BuyerStats | null>>({});
+  // 有 CampaignExt 的团购按名额的发货记录和 ETA 计算窗口;没有的是旧团购
+  const [maxTransit, setMaxTransit] = useState<number | null>(null);
+  const [shipments, setShipments] = useState<Record<string, Shipment | null>>({});
+  const [picked, setPicked] = useState<Record<string, boolean>>({});
+  const [eta, setEta] = useState("");
+  const [reference, setReference] = useState("");
   const [loadFailed, setLoadFailed] = useState(false);
   const [pending, setPending] = useState(false);
   const alive = useRef(true);
@@ -146,10 +180,11 @@ export function CampaignWindow({ address }: { address: string }) {
     }
     try {
       const connection = program.provider.connection;
-      const [account, escrowInfo, allSeats] = await Promise.all([
+      const [account, escrowInfo, allSeats, ext] = await Promise.all([
         program.account.campaign.fetchNullable(campaignKey),
         connection.getAccountInfo(escrowKey),
         chainRead("seats", () => program.account.contribution.all()),
+        program.account.campaignExt.fetchNullable(campaignExtPda(campaignKey)),
       ]);
       if (!alive.current) return;
       setCampaign(account);
@@ -160,9 +195,14 @@ export function CampaignWindow({ address }: { address: string }) {
         const rent = await connection.getMinimumBalanceForRentExemption(escrowInfo.data.length);
         setEscrowLamports(escrowInfo.lamports - rent);
       }
+      setMaxTransit(ext ? ext.maxTransitSeconds.toNumber() : null);
       if (mine.length > 0) {
-        const records = await program.account.buyerStats.fetchMultiple(mine.map((seat) => buyerStatsPda(seat.account.buyer)));
+        const [records, ships] = await Promise.all([
+          program.account.buyerStats.fetchMultiple(mine.map((seat) => buyerStatsPda(seat.account.buyer))),
+          ext ? program.account.shipment.fetchMultiple(mine.map((seat) => shipmentPda(campaignKey, seat.account.buyer))) : Promise.resolve([]),
+        ]);
         setBuyerRecords(Object.fromEntries(mine.map((seat, i) => [seat.account.buyer.toBase58(), records[i]])));
+        setShipments(Object.fromEntries(mine.map((seat, i) => [seat.account.buyer.toBase58(), (ships[i] as Shipment | null) ?? null])));
       }
       setLoadFailed(false);
     } catch (e) {
@@ -220,15 +260,33 @@ export function CampaignWindow({ address }: { address: string }) {
     );
   }
 
-  const status = displayStatus(campaign, now);
+  const hasRules = maxTransit !== null;
+  const windowOf = (seat: Seat) => seatWindow(campaign, hasRules, shipments[seat.account.buyer.toBase58()] ?? null);
+  // 新规则下每个名额的窗口不同:有名额还没到报告时间算"等待收货",有名额能报告算"申诉期",都过了算"可结算"
+  const baseStatus = displayStatus(campaign, now);
+  const openSeats = seats.filter((seat) => "paid" in seat.account.status);
+  const status: DisplayStatus =
+    hasRules && "active" in campaign.status && baseStatus !== "closed"
+      ? openSeats.some((seat) => now < windowOf(seat).opens)
+        ? "delivering"
+        : openSeats.some((seat) => reportOpen(windowOf(seat), now))
+          ? "appeal"
+          : now < campaign.deliveryDeadline.toNumber()
+            ? "delivering"
+            : "settling"
+      : baseStatus;
   const tier = tierOf(campaign);
   const organizer = campaign.organizer;
   const isOrganizer = publicKey?.equals(organizer) ?? false;
   const mySeat = publicKey ? seats.find((seat) => seat.account.buyer.equals(publicKey)) : undefined;
   const mySeatPaid = !!mySeat && "paid" in mySeat.account.status;
-  const next = nextDeadline(campaign, status);
+  const myWindow = mySeat ? windowOf(mySeat) : null;
+  const canReport = mySeatPaid && "active" in campaign.status && !!myWindow && reportOpen(myWindow, now);
+  const next = status === "appeal" && myWindow && mySeatPaid ? myWindow.closes : nextDeadline(campaign, status);
   const price = formatSol(campaign.price);
-  const appealOver = now >= campaign.appealEnd.toNumber();
+  const appeal = campaign.appealEnd.toNumber() - campaign.deliveryDeadline.toNumber();
+  // 最晚锁定到:发货期限前一刻发货、ETA 用满最长运输时间、再加申诉期和一次延长
+  const latestLock = hasRules ? campaign.deliveryDeadline.toNumber() + maxTransit! + appeal * 2 : campaign.appealEnd.toNumber();
   const timeLabel = (d.timeTo as Partial<Record<DisplayStatus, string>>)[status] ?? d.timeNone;
   const bond = bondHeld(campaign);
   const buyerFunds = Math.max(0, escrowLamports - bond.toNumber());
@@ -244,6 +302,13 @@ export function CampaignWindow({ address }: { address: string }) {
   const formatDate = (seconds: number) => new Date(seconds * 1000).toLocaleString(dateLocale(lang));
 
   const organizerStats = organizerStatsPda(organizer);
+  // 确认、报告、延长都要带上 CampaignExt 和这个名额的发货记录地址,合约用它们判断新旧规则
+  const seatAccounts = (buyer: PublicKey) => ({
+    campaign: campaignKey,
+    campaignExt: campaignExtPda(campaignKey),
+    contribution: contributionPda(campaignKey, buyer),
+    shipment: shipmentPda(campaignKey, buyer),
+  });
   const buyerAccounts = () => ({
     buyer: publicKey!,
     campaign: campaignKey,
@@ -283,15 +348,84 @@ export function CampaignWindow({ address }: { address: string }) {
     });
   const confirmDelivery = () =>
     send(say.confirm, d.done.confirmed, () =>
-      program.methods.confirmDelivery().accountsPartial({ buyer: publicKey!, campaign: campaignKey, contribution: contributionPda(campaignKey, publicKey!) }).rpc()
+      program.methods.confirmDelivery().accountsPartial({ ...seatAccounts(publicKey!), buyer: publicKey! }).rpc()
     );
+  const reportAccounts = () => ({
+    ...seatAccounts(publicKey!),
+    buyer: publicKey!,
+    organizerStatsExt: organizerStatsExtPda(organizer),
+    systemProgram: SystemProgram.programId,
+  });
   const report = () =>
     send(
       tier === "trust" ? say.reportTrust : say.report(formatSol(reportAmount(campaign))),
       d.done.reported,
-      () => program.methods.reportNotReceived().accountsPartial({ buyer: publicKey!, campaign: campaignKey, contribution: contributionPda(campaignKey, publicKey!) }).rpc(),
+      () => program.methods.reportNotReceived().accountsPartial(reportAccounts()).rpc(),
       true
     );
+  const reportUnshipped = () =>
+    send(
+      tier === "trust" ? say.reportUnshippedTrust : say.reportUnshipped(formatSol(reportAmount(campaign))),
+      d.done.reported,
+      () => program.methods.reportUnshipped().accountsPartial(reportAccounts()).rpc(),
+      true
+    );
+  const extend = () =>
+    send(say.extend(formatDate(myWindow!.closes + appeal)), d.done.extended, () =>
+      program.methods
+        .extendWaiting()
+        .accountsPartial({ ...seatAccounts(publicKey!), buyer: publicKey!, systemProgram: SystemProgram.programId })
+        .rpc()
+    );
+
+  // 批量提交发货记录:确认一次,按每批 8 个名额依次签名。一批失败不影响已经保存的批次
+  const shipBy = campaign.deliveryDeadline.toNumber();
+  const unshippedSeats = hasRules ? seats.filter((seat) => !shipments[seat.account.buyer.toBase58()]) : [];
+  const pickedSeats = unshippedSeats.filter((seat) => picked[seat.account.buyer.toBase58()]);
+  const latestEta = now + (maxTransit ?? 0);
+  // 没改过输入框时用默认 ETA:最长运输时间的一半(至少 30 秒),两头都给链上时间留余量
+  const etaInput = eta || toLocalInput(Math.min(latestEta, now + Math.max(30, Math.floor((maxTransit ?? 0) / 2))));
+  const etaSeconds = Math.floor(new Date(etaInput).getTime() / 1000);
+  const etaValid = !Number.isNaN(etaSeconds) && etaSeconds >= now && etaSeconds <= latestEta;
+  const canShip = isOrganizer && hasRules && ("funded" in campaign.status || "active" in campaign.status) && now < shipBy;
+  const recordShipments = async () => {
+    if (!etaValid || pickedSeats.length === 0) return;
+    const ok = await confirm({ text: say.ship(pickedSeats.length), confirmLabel: t.os.confirm });
+    if (!ok) return;
+    setPending(true);
+    const batches: Seat[][] = [];
+    for (let i = 0; i < pickedSeats.length; i += SHIPMENT_BATCH) batches.push(pickedSeats.slice(i, i + SHIPMENT_BATCH));
+    let saved = 0;
+    let signature = "";
+    try {
+      for (const group of batches) {
+        const entries = await Promise.all(group.map(async (seat) => ({ eta: new BN(etaSeconds), referenceHash: await referenceHash(reference, seat.publicKey) })));
+        signature = await program.methods
+          .recordShipmentBatch(entries)
+          .accountsPartial({ organizer: publicKey!, campaign: campaignKey, campaignExt: campaignExtPda(campaignKey), systemProgram: SystemProgram.programId })
+          .remainingAccounts(
+            group.flatMap((seat) => [
+              { pubkey: seat.publicKey, isSigner: false, isWritable: false },
+              { pubkey: shipmentPda(campaignKey, seat.account.buyer), isSigner: false, isWritable: true },
+            ])
+          )
+          .rpc();
+        saved += 1;
+      }
+      setPicked({});
+      clearChainCache();
+      await refresh();
+      void done(batches.length > 1 ? `${d.done.shipped} · ${d.shipProgress(saved, batches.length)}` : d.done.shipped, signature);
+    } catch (e) {
+      console.warn(e);
+      clearChainCache();
+      await refresh();
+      const error = translateError(e);
+      void fail(saved > 0 ? { zh: `${t.detail.shipProgress(saved, batches.length)}。${error.zh}`, en: `${d.shipProgress(saved, batches.length)}. ${error.en}` } : error);
+    } finally {
+      setPending(false);
+    }
+  };
   const settleText = (seat: Seat) => {
     const amount = settleAmount(campaign);
     if (amount.isZero()) return say.settleNone;
@@ -310,6 +444,10 @@ export function CampaignWindow({ address }: { address: string }) {
           contribution: contributionPda(campaignKey, seat.account.buyer),
           organizerStats,
           buyerStats: buyerStatsPda(seat.account.buyer),
+          campaignExt: campaignExtPda(campaignKey),
+          shipment: shipmentPda(campaignKey, seat.account.buyer),
+          organizerStatsExt: organizerStatsExtPda(organizer),
+          systemProgram: SystemProgram.programId,
         })
         .rpc()
     );
@@ -347,16 +485,28 @@ export function CampaignWindow({ address }: { address: string }) {
           {label(d.withdraw(formatSol(releaseAmount(campaign))))}
         </button>
       );
-    if ((status === "delivering" || status === "appeal") && mySeatPaid)
+    if ("active" in campaign.status && mySeatPaid && myWindow && now < myWindow.closes)
       buttons.push(
         <button key="confirm" type="button" onClick={confirmDelivery} disabled={pending} className="btn-primary w-full">
           {label(d.confirm)}
         </button>
       );
-    if (status === "appeal" && mySeatPaid)
+    if (canReport && myWindow!.shipped === false)
+      buttons.push(
+        <button key="report-unshipped" type="button" onClick={reportUnshipped} disabled={pending} className="btn-danger w-full">
+          {label(tier === "trust" ? d.reportUnshippedTrust : d.reportUnshipped(formatSol(reportAmount(campaign))))}
+        </button>
+      );
+    if (canReport && myWindow!.shipped !== false)
       buttons.push(
         <button key="report" type="button" onClick={report} disabled={pending} className="btn-danger w-full">
           {label(tier === "trust" ? d.reportTrust : d.report(formatSol(reportAmount(campaign))))}
+        </button>
+      );
+    if (canReport && hasRules && !myWindow!.extended)
+      buttons.push(
+        <button key="extend" type="button" onClick={extend} disabled={pending} className="btn w-full">
+          {label(d.extend)}
         </button>
       );
     if (status === "open" && isOrganizer)
@@ -380,6 +530,12 @@ export function CampaignWindow({ address }: { address: string }) {
   }
 
   const waitingMessage = () => {
+    // 有自己的名额时,按这个名额的窗口说明下一步
+    if (mySeat && !mySeatPaid && "active" in campaign.status) return d.wait.seatDecided;
+    if (mySeatPaid && myWindow && "active" in campaign.status) {
+      if (now >= myWindow.closes) return d.wait.seatClosed;
+      if (now < myWindow.opens) return d.wait.seatWaiting(formatDate(myWindow.opens));
+    }
     switch (status) {
       case "open":
         return mySeat ? d.wait.open : d.wait.nothing;
@@ -400,7 +556,16 @@ export function CampaignWindow({ address }: { address: string }) {
 
   const seatStatusLabel = (seat: Seat) =>
     "confirmed" in seat.account.status ? d.seatConfirmed : "reported" in seat.account.status ? d.seatReported : d.seatPaid;
-  const canSettle = (seat: Seat) => "active" in campaign.status && status !== "closed" && (!("paid" in seat.account.status) || appealOver);
+  // 每个名额按自己的截止时间结算,和合约一致
+  const canSettle = (seat: Seat) => "active" in campaign.status && status !== "closed" && (!("paid" in seat.account.status) || now >= windowOf(seat).closes);
+  const seatShipLine = (seat: Seat) => {
+    if (!hasRules) return null;
+    const w = windowOf(seat);
+    const ship = shipments[seat.account.buyer.toBase58()];
+    const head = ship?.shipped ? d.seatShipped(formatDate(ship.eta.toNumber())) : now >= shipBy ? d.seatOverdue : d.seatNotShipped;
+    const tail = "paid" in seat.account.status ? ` · ${d.seatReportBy(formatDate(w.closes))}${w.extended ? ` · ${d.seatExtended}` : ""}` : "";
+    return head + tail;
+  };
   const settleLabel = (seat: Seat) => {
     const amount = settleAmount(campaign);
     if (amount.isZero()) return d.settleNoMoney;
@@ -410,17 +575,19 @@ export function CampaignWindow({ address }: { address: string }) {
   const deadlines: { label: string; at: number; note?: string }[] = [
     { label: d.joinBy, at: campaign.deadline.toNumber() },
     { label: d.shipBy, at: campaign.deliveryDeadline.toNumber() },
-    { label: d.reportBy, at: campaign.appealEnd.toNumber(), note: CLUSTER === "devnet" ? d.appealNote : undefined },
+    ...(hasRules && !(myWindow && mySeatPaid)
+      ? []
+      : [{ label: d.reportBy, at: myWindow && mySeatPaid ? myWindow.closes : campaign.appealEnd.toNumber(), note: CLUSTER === "devnet" ? d.appealNote : undefined }]),
   ];
 
   return (
     <div className="space-y-4">
-      {status === "appeal" && (
+      {canReport && (
         <div role="status" className="border-2 border-ink bg-sun p-3">
           <p className="pixel-title">{d.appealBanner}</p>
-          <p className="pixel-num text-2xl">{formatCountdown(Math.max(0, campaign.appealEnd.toNumber() - now))}</p>
+          <p className="pixel-num text-2xl">{formatCountdown(Math.max(0, myWindow!.closes - now))}</p>
           <p className="text-[13px]">
-            {d.appealCloses(formatDate(campaign.appealEnd.toNumber()))} {CLUSTER === "devnet" && d.appealNote}
+            {d.appealCloses(formatDate(myWindow!.closes))} {CLUSTER === "devnet" && d.appealNote}
           </p>
         </div>
       )}
@@ -466,7 +633,7 @@ export function CampaignWindow({ address }: { address: string }) {
               <dd className="pixel-num text-xl">{next === null || next <= now ? t.ended : formatCountdown(next - now)}</dd>
             </div>
           </dl>
-          <p className="text-[13px]">{tier === "trust" ? d.lockedUnsecured : d.lockedUntil(formatDate(campaign.appealEnd.toNumber()))}</p>
+          <p className="text-[13px]">{tier === "trust" ? d.lockedUnsecured : d.lockedUntil(formatDate(latestLock))}</p>
           <div>
             <p className="mb-1 text-[13px]">
               {d.seats}: {t.home.joinedCount(campaign.joinedCount, campaign.targetCount)}
@@ -499,6 +666,78 @@ export function CampaignWindow({ address }: { address: string }) {
           ))}
         </dl>
       </section>
+
+      {("active" in campaign.status || "funded" in campaign.status || "closed" in campaign.status) && (
+        <section>
+          <h3 className="pixel-title mb-1">{d.shipTitle}</h3>
+          <p className="text-[13px] leading-relaxed">{hasRules ? d.shipNote : d.legacyNote}</p>
+          {hasRules && mySeat && <p className="mt-1 text-[13px] font-semibold">{seatShipLine(mySeat)}</p>}
+          {hasRules && <p className="mt-1 text-[13px] leading-relaxed">{d.defaultNote}</p>}
+          {canShip && (
+            <div className="panel mt-2 space-y-2 text-[13px]">
+              <p className="pixel-title">{d.shipPanelTitle}</p>
+              <p>{d.shipPanelNote}</p>
+              {unshippedSeats.length === 0 ? (
+                <p>{d.shipNone}</p>
+              ) : (
+                <>
+                  <label className="flex items-center gap-2 font-semibold">
+                    <input
+                      type="checkbox"
+                      className="accent-ink"
+                      checked={pickedSeats.length === unshippedSeats.length}
+                      onChange={(e) => setPicked(e.target.checked ? Object.fromEntries(unshippedSeats.map((seat) => [seat.account.buyer.toBase58(), true])) : {})}
+                    />
+                    {d.shipSelectAll} ({pickedSeats.length}/{unshippedSeats.length})
+                  </label>
+                  <ul className="max-h-40 overflow-auto border-2 border-ink">
+                    {unshippedSeats.map((seat) => {
+                      const key = seat.account.buyer.toBase58();
+                      return (
+                        <li key={key} className="border-b-2 border-line px-2 py-1 last:border-b-0">
+                          <label className="flex items-center gap-2">
+                            <input type="checkbox" className="accent-ink" checked={!!picked[key]} onChange={(e) => setPicked((prev) => ({ ...prev, [key]: e.target.checked }))} />
+                            {shortAddress(key)}
+                          </label>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                  <div>
+                    <label htmlFor={`eta-${address}`} className="font-semibold">
+                      {d.etaLabel}
+                    </label>
+                    <input
+                      id={`eta-${address}`}
+                      type="datetime-local"
+                      step={1}
+                      className="field mt-1"
+                      value={etaInput}
+                      onChange={(e) => setEta(e.target.value)}
+                    />
+                    <p className="mt-1">{!etaValid ? d.etaError(formatDate(latestEta)) : d.etaHint(formatDate(latestEta))}</p>
+                  </div>
+                  <div>
+                    <label htmlFor={`ref-${address}`} className="font-semibold">
+                      {d.refLabel}
+                    </label>
+                    <input id={`ref-${address}`} className="field mt-1" value={reference} onChange={(e) => setReference(e.target.value)} />
+                    <p className="mt-1">{d.refHint}</p>
+                  </div>
+                  <button
+                    type="button"
+                    className="btn-primary w-full"
+                    disabled={pending || pickedSeats.length === 0 || !etaValid}
+                    onClick={() => void recordShipments()}
+                  >
+                    {label(d.shipSubmit(pickedSeats.length))}
+                  </button>
+                </>
+              )}
+            </div>
+          )}
+        </section>
+      )}
 
       <section className="panel">
         <h3 className="pixel-title">{d.fundsTitle}</h3>
@@ -554,6 +793,7 @@ export function CampaignWindow({ address }: { address: string }) {
                     </button>
                     <span>{seatStatusLabel(seat)}</span>
                   </div>
+                  {seatShipLine(seat) && <p className="mt-0.5">{seatShipLine(seat)}</p>}
                   {isOrganizer && (
                     <p className="mt-0.5">
                       {record ? d.buyerSummary(record.campaignsJoined.toString(), record.seatsConfirmed.toString(), record.seatsReported.toString()) : d.newBuyer}

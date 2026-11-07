@@ -43,6 +43,9 @@ flowchart LR
     S --> P[Contribution PDA, one per seat]
     S --> O[OrganizerStats PDA]
     S --> B[BuyerStats PDA]
+    S --> X[CampaignExt PDA]
+    S --> H[Shipment PDA, one per seat]
+    S --> Y[OrganizerStatsExt PDA]
 ```
 
 | Account | Seeds | Purpose |
@@ -52,6 +55,20 @@ flowchart LR
 | Contribution | `"contribution", campaign, buyer` | One seat. Closed when settled, refunded or left, with rent returned to the buyer |
 | OrganizerStats | `"organizer", organizer` | The organizer's record, split by tier |
 | BuyerStats | `"buyer", buyer` | The buyer's record |
+| CampaignExt | `"campaign_ext", campaign` | Created with every new group buy. Holds the organizer's declared longest transit time. A group buy without it was created before v2.2 and keeps one shared appeal window |
+| Shipment | `"shipment", contribution` | One seat's shipment statement: chain time it was recorded, the ETA, a hash of the tracking reference and whether the buyer extended once. Kept after settlement as a public record |
+| OrganizerStatsExt | `"organizer_stats_ext", organizer` | Seats settled with no shipment record, and unverified buyer reports. Kept apart from OrganizerStats so older accounts never need migrating |
+
+### Time model (v2.2)
+
+| Variable | Meaning | Set by |
+| --- | --- | --- |
+| `ship_by` (`delivery_deadline`) | Latest time to record a shipment | Organizer, at creation |
+| `max_transit` | Longest allowed gap between recording a shipment and its ETA, at most 60 days | Organizer, at creation |
+| `eta` | When this seat's buyer should expect the goods, between now and now + `max_transit` | Organizer, when recording the shipment |
+| report window | From `eta` if shipped, otherwise from `ship_by`, for one appeal period (7 days, 60 seconds on Devnet), plus one more if the buyer extended | The program, per seat |
+
+A buyer can report "not shipped" once `ship_by` passes with no shipment record, or "shipped but not received" once the seat's ETA passes. Both are paid by the same tier rule (100%, 30% or 0%). The program never decides whether a parcel really arrived. It records each side's statement and the deadline, and pays by the rule agreed when the buyer joined.
 
 ## Money flow
 
@@ -93,20 +110,24 @@ stateDiagram-v2
 stateDiagram-v2
     [*] --> Paid: contribute
     Paid --> [*]: leave or refund
-    Paid --> Confirmed: confirm_delivery, before appeal_end
-    Paid --> Reported: report_not_received, between delivery_deadline and appeal_end
+    Paid --> Paid: record_shipment_batch (organizer, before ship_by) / extend_waiting (buyer, once)
+    Paid --> Confirmed: confirm_delivery, before the seat's deadline
+    Paid --> Reported: report_unshipped (no shipment, after ship_by) or report_not_received (shipped, after ETA)
     Confirmed --> [*]: settle_seat
     Reported --> [*]: settle_seat
-    Paid --> [*]: settle_seat, after appeal_end
+    Paid --> [*]: settle_seat after the seat's own deadline (default settlement)
 ```
 
 ## Rules the program enforces
 
 - Fundraising lasts at most 90 days, and shipping at most 365 days after that.
 - The appeal window is fixed by the program at 7 days (60 seconds on the Devnet demo build), so an organizer can't shorten it.
-- A buyer can report from the shipping deadline (inclusive) until `appeal_end` (exclusive). At exactly `appeal_end` the window is closed: reports and confirmations fail, and unanswered seats can be settled. The app uses the same rule.
+- Each seat's report window opens at its ETA (or at `ship_by` with no shipment record) and closes one appeal period later, inclusive at the start and exclusive at the end. At exactly the closing second, reports, confirmations and extensions fail and the seat can be settled. The program and the app use the same rule.
+- Shipments can be recorded only after the group fills and before `ship_by`, so a late record can't erase an overdue seat. The ETA must be between now and now + `max_transit`, so an organizer can't push a buyer's report window months away.
+- A shipment batch lists 1 to 8 seats, which is what fits in one 1,232-byte transaction (measured in the tests). Every seat and record address is re-derived on-chain, and the batch is atomic: one bad seat and nothing is written.
+- Each seat settles on its own deadline. One buyer extending never holds up the other seats. The group buy closes only when every seat is settled.
+- If no report arrives before a seat's deadline, that seat is settled by the preset rule and the remainder goes to the organizer. No report doesn't prove the goods arrived.
 - An organizer can't join their own group buy. The whole transaction fails, so no seat is created and no money moves.
-- Buyers can't report before the shipping deadline, which gives the organizer time to ship.
 - The remainder reaches the organizer only after the buyer confirms or the appeal window ends.
 - Every payout checks the escrow balance first and goes to an address fixed by the program, so anyone can safely call `settle_seat` and `finalize_campaign`.
 
@@ -120,6 +141,8 @@ stateDiagram-v2
 | Organizer takes the money and runs | Prevented | Partly: buyer recovers 30% | Not prevented |
 | Organizer fills seats with their own wallets | Prevented: the bond backs every seat, so a real buyer still gets the full price | Not prevented | Not prevented |
 | Buyer falsely reports non-delivery | Partly, see below | Not prevented | No effect on money |
+| Organizer records a fake shipment | Not prevented, see below | Not prevented | Not prevented |
+| Organizer sets a far-off ETA to delay reports | Limited by `max_transit` (at most 60 days) | Limited | Limited |
 | Inflating a reputation with fake activity | Not prevented | Not prevented | Not prevented |
 | Program upgrade changes the rules | Disclosed, see below | Disclosed | Disclosed |
 
@@ -127,6 +150,8 @@ stateDiagram-v2
 - **Reputation:** records are public and the organizer can't delete them, but extra wallets can inflate them. Treat them as a reference only.
 - **Upgrades:** the deployer's wallet currently holds the upgrade authority, so it could change the rules. This must move to a multisig or be frozen before mainnet.
 - **A filled group proves nothing:** because of extra wallets, a full group doesn't show real demand. The organizer's own wallet can't take a seat, but other wallets they control can.
+- **Fake shipment records:** the organizer may submit fabricated shipment information to bypass the unshipped report. The program verifies that a shipment statement exists and when it was made, but can't verify that a parcel was really sent or delivered. Buyers then rely on the ETA-based non-receipt report, and those reports stay unverified unless an arbitration mechanism is added. The ETA cap and the on-chain hash of the tracking reference limit the damage and leave evidence for later.
+- **Records are statements, not facts:** "no shipment record" means the organizer made no statement on DropSafe, not that nothing was sent. The organizer profile counts these seats separately from buyer reports, and labels both as unverified.
 - **Organizer disappears before the shipping deadline:** buyers can only report after the shipping deadline, so protection starts late. The group buy window shows both the shipping deadline and when reports open.
 - **Malicious reports on Unsecured:** a report costs nothing and nobody adjudicates it, so it can be used to drag down an organizer's record. The organizer profile shows these as "Y of X settled seats reported not received" and says the reports are unverified. A report is not a confirmed failure to deliver.
 - **A buyer misses the appeal window:** a buyer who stays offline for the whole window can't report afterwards. The group buy window shows a countdown during the appeal window, and My Wallet lists seats that can still be reported. Reminders reduce this risk but don't replace reporting.
@@ -184,7 +209,7 @@ anchor build -- --features devnet-demo         # 60-second appeal window, used o
 
 ### Known limits of the text fields
 
-One create transaction has room for about 870 bytes of text. A title, a link and a full English description fit. A Chinese description uses three bytes per character, so the form asks for shorter text when the total won't fit.
+One create transaction has room for about 800 bytes of text (the v2.2 accounts take some of the space). A title, a link and a full English description fit. A Chinese description uses three bytes per character, so the form asks for shorter text when the total won't fit.
 
 ## Earlier versions
 

@@ -4,24 +4,25 @@ import { useCallback, useEffect, useState } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import type { PublicKey } from "@solana/web3.js";
-import { displayStatus, formatSol, type Campaign, type Contribution } from "@/lib/campaign";
+import { displayStatus, formatSol, reportOpen, seatWindow, type Campaign, type Contribution, type SeatWindow, type Shipment } from "@/lib/campaign";
 import { chainRead } from "@/lib/chain";
 import { dateLocale, useI18n } from "@/lib/i18n";
-import { contributionPda, useDropsafe } from "@/lib/program";
+import { campaignExtPda, contributionPda, shipmentPda, useDropsafe } from "@/lib/program";
 import { useNow } from "@/components/useNow";
 import { DesktopIcon } from "@/components/os/icons";
 import { useOS } from "@/components/os/OS";
 
 type Todo = "confirm" | "report" | "refund";
-type SeatRow = { address: string; campaign: Campaign; seat: Contribution };
+type SeatRow = { address: string; campaign: Campaign; seat: Contribution; window: SeatWindow };
 
-// 只看名额和链上状态:收货期内可确认,申诉期内可报告,失败、被放弃或取消后可退款
+// 按这个名额自己的窗口分类:报告窗口开着可报告,还没开可确认,失败、被放弃或取消后可退款
 function todoOf(row: SeatRow, now: number): Todo | null {
   const status = displayStatus(row.campaign, now);
   const paid = "paid" in row.seat.status;
   if (status === "failed" || status === "abandoned" || status === "cancelled") return "refund";
-  if (status === "appeal" && paid) return "report";
-  if (status === "delivering" && paid) return "confirm";
+  if (!("active" in row.campaign.status) || !paid) return null;
+  if (reportOpen(row.window, now)) return "report";
+  if (now < row.window.opens) return "confirm";
   return null;
 }
 
@@ -43,12 +44,24 @@ function PendingSeats({ owner }: { owner: PublicKey }) {
         chainRead(`seats-of-${address}`, () => program.account.contribution.all([{ memcmp: { offset: 8, bytes: address } }])),
       ]);
       const seatByKey = new Map(mine.map((seat) => [seat.publicKey.toBase58(), seat.account]));
-      const found: SeatRow[] = [];
-      for (const row of campaigns) {
-        const seat = seatByKey.get(contributionPda(row.publicKey, owner).toBase58());
-        if (seat) found.push({ address: row.publicKey.toBase58(), campaign: row.account, seat });
-      }
-      setRows(found);
+      const matched = campaigns
+        .map((row) => ({ row, seat: seatByKey.get(contributionPda(row.publicKey, owner).toBase58()) }))
+        .filter((x): x is { row: (typeof campaigns)[number]; seat: Contribution } => !!x.seat);
+      const keys = matched.map((x) => x.row.publicKey);
+      const [exts, ships] = keys.length
+        ? await Promise.all([
+            program.account.campaignExt.fetchMultiple(keys.map(campaignExtPda)),
+            program.account.shipment.fetchMultiple(keys.map((k) => shipmentPda(k, owner))),
+          ])
+        : [[], []];
+      setRows(
+        matched.map(({ row, seat }, i) => ({
+          address: row.publicKey.toBase58(),
+          campaign: row.account,
+          seat,
+          window: seatWindow(row.account, !!exts[i], (ships[i] as Shipment | null) ?? null),
+        }))
+      );
       setFailed(false);
     } catch (e) {
       console.warn(e);
@@ -94,7 +107,7 @@ function PendingSeats({ owner }: { owner: PublicKey }) {
                       onClick={(e) => open("campaign", row.address, e.currentTarget)}
                     >
                       <span className="font-semibold">{row.campaign.title}</span>
-                      {group.key !== "refund" && <span>{w.todoBy(formatDate(row.campaign.appealEnd.toNumber()))}</span>}
+                      {group.key !== "refund" && <span>{w.todoBy(formatDate(row.window.closes))}</span>}
                     </button>
                   </li>
                 ))}

@@ -151,6 +151,34 @@ export type Dropsafe = {
           }
         },
         {
+          "name": "campaignExt",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  109,
+                  112,
+                  97,
+                  105,
+                  103,
+                  110,
+                  95,
+                  101,
+                  120,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign"
+              }
+            ]
+          }
+        },
+        {
           "name": "contribution",
           "writable": true,
           "pda": {
@@ -179,6 +207,30 @@ export type Dropsafe = {
               {
                 "kind": "account",
                 "path": "buyer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "shipment",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  104,
+                  105,
+                  112,
+                  109,
+                  101,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "contribution"
               }
             ]
           }
@@ -477,6 +529,77 @@ export type Dropsafe = {
           }
         },
         {
+          "name": "campaignExt",
+          "docs": [
+            "新规则账户:存最长运输时间。有它的团购按发货记录和 ETA 计算申诉期"
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  109,
+                  112,
+                  97,
+                  105,
+                  103,
+                  110,
+                  95,
+                  101,
+                  120,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign"
+              }
+            ]
+          }
+        },
+        {
+          "name": "organizerStatsExt",
+          "docs": [
+            "团长扩展记录:和团长记录一样由团长在第一次创建活动时初始化"
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  103,
+                  97,
+                  110,
+                  105,
+                  122,
+                  101,
+                  114,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  115,
+                  95,
+                  101,
+                  120,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "organizer"
+              }
+            ]
+          }
+        },
+        {
           "name": "systemProgram",
           "address": "11111111111111111111111111111111"
         }
@@ -521,8 +644,158 @@ export type Dropsafe = {
               "name": "tier"
             }
           }
+        },
+        {
+          "name": "maxTransitSeconds",
+          "type": "i64"
         }
       ]
+    },
+    {
+      "name": "extendWaiting",
+      "docs": [
+        "买家把自己名额的申诉截止时间延长一次"
+      ],
+      "discriminator": [
+        102,
+        110,
+        244,
+        7,
+        203,
+        226,
+        51,
+        249
+      ],
+      "accounts": [
+        {
+          "name": "buyer",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "campaign",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  109,
+                  112,
+                  97,
+                  105,
+                  103,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign.organizer",
+                "account": "campaign"
+              },
+              {
+                "kind": "account",
+                "path": "campaign.campaignId",
+                "account": "campaign"
+              }
+            ]
+          }
+        },
+        {
+          "name": "campaignExt",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  109,
+                  112,
+                  97,
+                  105,
+                  103,
+                  110,
+                  95,
+                  101,
+                  120,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign"
+              }
+            ]
+          }
+        },
+        {
+          "name": "contribution",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  116,
+                  114,
+                  105,
+                  98,
+                  117,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign"
+              },
+              {
+                "kind": "account",
+                "path": "buyer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "shipment",
+          "docs": [
+            "没有发货声明时由买家创建一条 shipped = false 的记录来存延长标记"
+          ],
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  104,
+                  105,
+                  112,
+                  109,
+                  101,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "contribution"
+              }
+            ]
+          }
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
     },
     {
       "name": "finalizeCampaign",
@@ -688,6 +961,109 @@ export type Dropsafe = {
         }
       ],
       "args": []
+    },
+    {
+      "name": "recordShipmentBatch",
+      "docs": [
+        "团长批量提交发货声明:每个名额一条记录,ETA 由团长填写,发货时间用链上时间"
+      ],
+      "discriminator": [
+        78,
+        190,
+        101,
+        171,
+        26,
+        52,
+        206,
+        126
+      ],
+      "accounts": [
+        {
+          "name": "organizer",
+          "docs": [
+            "只有团长能提交,并支付发货记录的租金"
+          ],
+          "writable": true,
+          "signer": true,
+          "relations": [
+            "campaign"
+          ]
+        },
+        {
+          "name": "campaign",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  109,
+                  112,
+                  97,
+                  105,
+                  103,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign.organizer",
+                "account": "campaign"
+              },
+              {
+                "kind": "account",
+                "path": "campaign.campaignId",
+                "account": "campaign"
+              }
+            ]
+          }
+        },
+        {
+          "name": "campaignExt",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  109,
+                  112,
+                  97,
+                  105,
+                  103,
+                  110,
+                  95,
+                  101,
+                  120,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign"
+              }
+            ]
+          }
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "entries",
+          "type": {
+            "vec": {
+              "defined": {
+                "name": "shipmentEntry"
+              }
+            }
+          }
+        }
+      ]
     },
     {
       "name": "refund",
@@ -966,7 +1342,7 @@ export type Dropsafe = {
     {
       "name": "reportNotReceived",
       "docs": [
-        "买家在申诉期内报告未收到"
+        "买家报告未收到:新规则下需要有发货声明且 ETA 已过;旧团购按原来的申诉期"
       ],
       "discriminator": [
         129,
@@ -982,8 +1358,9 @@ export type Dropsafe = {
         {
           "name": "buyer",
           "docs": [
-            "只有买家本人能报告"
+            "只有买家本人能报告;第一次给团长记扩展统计时由买家付租金"
           ],
+          "writable": true,
           "signer": true
         },
         {
@@ -1012,6 +1389,34 @@ export type Dropsafe = {
                 "kind": "account",
                 "path": "campaign.campaignId",
                 "account": "campaign"
+              }
+            ]
+          }
+        },
+        {
+          "name": "campaignExt",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  109,
+                  112,
+                  97,
+                  105,
+                  103,
+                  110,
+                  95,
+                  101,
+                  120,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign"
               }
             ]
           }
@@ -1048,6 +1453,254 @@ export type Dropsafe = {
               }
             ]
           }
+        },
+        {
+          "name": "shipment",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  104,
+                  105,
+                  112,
+                  109,
+                  101,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "contribution"
+              }
+            ]
+          }
+        },
+        {
+          "name": "organizerStatsExt",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  103,
+                  97,
+                  110,
+                  105,
+                  122,
+                  101,
+                  114,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  115,
+                  95,
+                  101,
+                  120,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign.organizer",
+                "account": "campaign"
+              }
+            ]
+          }
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": []
+    },
+    {
+      "name": "reportUnshipped",
+      "docs": [
+        "新规则:发货期限已过且没有发货声明时,买家报告未按期发货"
+      ],
+      "discriminator": [
+        186,
+        220,
+        211,
+        251,
+        233,
+        231,
+        103,
+        175
+      ],
+      "accounts": [
+        {
+          "name": "buyer",
+          "docs": [
+            "只有买家本人能报告;第一次给团长记扩展统计时由买家付租金"
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "campaign",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  109,
+                  112,
+                  97,
+                  105,
+                  103,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign.organizer",
+                "account": "campaign"
+              },
+              {
+                "kind": "account",
+                "path": "campaign.campaignId",
+                "account": "campaign"
+              }
+            ]
+          }
+        },
+        {
+          "name": "campaignExt",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  109,
+                  112,
+                  97,
+                  105,
+                  103,
+                  110,
+                  95,
+                  101,
+                  120,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign"
+              }
+            ]
+          }
+        },
+        {
+          "name": "contribution",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  116,
+                  114,
+                  105,
+                  98,
+                  117,
+                  116,
+                  105,
+                  111,
+                  110
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign"
+              },
+              {
+                "kind": "account",
+                "path": "buyer"
+              }
+            ]
+          }
+        },
+        {
+          "name": "shipment",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  104,
+                  105,
+                  112,
+                  109,
+                  101,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "contribution"
+              }
+            ]
+          }
+        },
+        {
+          "name": "organizerStatsExt",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  103,
+                  97,
+                  110,
+                  105,
+                  122,
+                  101,
+                  114,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  115,
+                  95,
+                  101,
+                  120,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign.organizer",
+                "account": "campaign"
+              }
+            ]
+          }
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
         }
       ],
       "args": []
@@ -1071,8 +1724,9 @@ export type Dropsafe = {
         {
           "name": "caller",
           "docs": [
-            "任何人都可以调用,钱只会转给合约固定的地址"
+            "任何人都可以调用,钱只会转给合约固定的地址;第一次给团长记扩展统计时付租金"
           ],
+          "writable": true,
           "signer": true
         },
         {
@@ -1205,6 +1859,99 @@ export type Dropsafe = {
               }
             ]
           }
+        },
+        {
+          "name": "campaignExt",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  97,
+                  109,
+                  112,
+                  97,
+                  105,
+                  103,
+                  110,
+                  95,
+                  101,
+                  120,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign"
+              }
+            ]
+          }
+        },
+        {
+          "name": "shipment",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  115,
+                  104,
+                  105,
+                  112,
+                  109,
+                  101,
+                  110,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "contribution"
+              }
+            ]
+          }
+        },
+        {
+          "name": "organizerStatsExt",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  111,
+                  114,
+                  103,
+                  97,
+                  110,
+                  105,
+                  122,
+                  101,
+                  114,
+                  95,
+                  115,
+                  116,
+                  97,
+                  116,
+                  115,
+                  95,
+                  101,
+                  120,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "campaign.organizer",
+                "account": "campaign"
+              }
+            ]
+          }
+        },
+        {
+          "name": "systemProgram",
+          "address": "11111111111111111111111111111111"
         },
         {
           "name": "buyerStats",
@@ -1399,6 +2146,19 @@ export type Dropsafe = {
       ]
     },
     {
+      "name": "campaignExt",
+      "discriminator": [
+        131,
+        106,
+        70,
+        215,
+        90,
+        223,
+        141,
+        129
+      ]
+    },
+    {
       "name": "contribution",
       "discriminator": [
         182,
@@ -1435,6 +2195,32 @@ export type Dropsafe = {
         14,
         217,
         218
+      ]
+    },
+    {
+      "name": "organizerStatsExt",
+      "discriminator": [
+        146,
+        60,
+        133,
+        44,
+        66,
+        207,
+        166,
+        9
+      ]
+    },
+    {
+      "name": "shipment",
+      "discriminator": [
+        3,
+        65,
+        195,
+        72,
+        154,
+        63,
+        211,
+        213
       ]
     }
   ],
@@ -1608,6 +2394,61 @@ export type Dropsafe = {
       "code": 6033,
       "name": "organizerCannotJoin",
       "msg": "The organizer cannot join their own group buy"
+    },
+    {
+      "code": 6034,
+      "name": "invalidMaxTransit",
+      "msg": "The longest transit time must be between 1 second and 60 days"
+    },
+    {
+      "code": 6035,
+      "name": "noShippingRules",
+      "msg": "This group buy was created before shipment records existed"
+    },
+    {
+      "code": 6036,
+      "name": "invalidShipmentBatch",
+      "msg": "A shipment batch must list between 1 and 8 seats, with two accounts per seat"
+    },
+    {
+      "code": 6037,
+      "name": "shippingClosed",
+      "msg": "Shipments can be recorded only after the group fills and before the shipping deadline"
+    },
+    {
+      "code": 6038,
+      "name": "invalidEta",
+      "msg": "The ETA must be between now and now plus the longest transit time"
+    },
+    {
+      "code": 6039,
+      "name": "shipmentAlreadyRecorded",
+      "msg": "This seat already has a shipment record"
+    },
+    {
+      "code": 6040,
+      "name": "invalidShipmentAccount",
+      "msg": "This account is not the seat or shipment record it claims to be"
+    },
+    {
+      "code": 6041,
+      "name": "seatWasShipped",
+      "msg": "This seat has a shipment record, so report that it didn't arrive instead"
+    },
+    {
+      "code": 6042,
+      "name": "seatNotShipped",
+      "msg": "This seat has no shipment record, so report that it wasn't shipped instead"
+    },
+    {
+      "code": 6043,
+      "name": "extensionUsed",
+      "msg": "This seat's waiting period has already been extended once"
+    },
+    {
+      "code": 6044,
+      "name": "extensionNotAvailable",
+      "msg": "The waiting period can be extended only while this seat's report window is open"
     }
   ],
   "types": [
@@ -1751,6 +2592,30 @@ export type Dropsafe = {
           {
             "name": "finalized",
             "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "campaignExt",
+      "docs": [
+        "新规则的开关:新建的团购都有这个账户,存团长声明的最长运输时间。",
+        "没有这个账户的旧团购继续用 v2.1 的时间规则"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "campaign",
+            "type": "pubkey"
+          },
+          {
+            "name": "maxTransitSeconds",
+            "type": "i64"
           },
           {
             "name": "bump",
@@ -1924,6 +2789,120 @@ export type Dropsafe = {
       }
     },
     {
+      "name": "organizerStatsExt",
+      "docs": [
+        "团长的扩展记录,和 OrganizerStats 分开存,旧账户不用迁移"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "organizer",
+            "type": "pubkey"
+          },
+          {
+            "name": "missingShipmentRecordSeats",
+            "docs": [
+              "结算时没有链上发货记录的名额(只说明没有声明,不证明现实中没发货)"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "unverifiedReports",
+            "docs": [
+              "买家提交的报告,两种都算,都没有经过仲裁"
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "shipment",
+      "docs": [
+        "一个名额的履约记录,种子是 [\"shipment\", 名额凭证]。结算后保留,作为公开记录。",
+        "shipped = true 表示团长在发货期限前提交了发货声明。",
+        "这只是团长的声明,合约无法验证包裹真的寄出。",
+        "shipped = false 的记录只会在买家延长等待期时创建(那时发货期限已过且没有发货声明)"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "campaign",
+            "type": "pubkey"
+          },
+          {
+            "name": "buyer",
+            "type": "pubkey"
+          },
+          {
+            "name": "shipped",
+            "type": "bool"
+          },
+          {
+            "name": "shippedAt",
+            "docs": [
+              "链上时间,不由团长填写"
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "eta",
+            "type": "i64"
+          },
+          {
+            "name": "referenceHash",
+            "docs": [
+              "物流参考信息的哈希,不存单号、姓名或地址"
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "extensionUsed",
+            "type": "bool"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "shipmentEntry",
+      "docs": [
+        "一个名额的发货声明:ETA 和物流参考信息的哈希"
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "eta",
+            "type": "i64"
+          },
+          {
+            "name": "referenceHash",
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
       "name": "tier",
       "docs": [
         "保障档位,创建后不可修改"
@@ -1987,6 +2966,11 @@ export type Dropsafe = {
       "value": "[98, 117, 121, 101, 114]"
     },
     {
+      "name": "campaignExtSeed",
+      "type": "bytes",
+      "value": "[99, 97, 109, 112, 97, 105, 103, 110, 95, 101, 120, 116]"
+    },
+    {
       "name": "campaignSeed",
       "type": "bytes",
       "value": "[99, 97, 109, 112, 97, 105, 103, 110]"
@@ -2002,9 +2986,19 @@ export type Dropsafe = {
       "value": "[101, 115, 99, 114, 111, 119]"
     },
     {
+      "name": "organizerExtSeed",
+      "type": "bytes",
+      "value": "[111, 114, 103, 97, 110, 105, 122, 101, 114, 95, 115, 116, 97, 116, 115, 95, 101, 120, 116]"
+    },
+    {
       "name": "organizerSeed",
       "type": "bytes",
       "value": "[111, 114, 103, 97, 110, 105, 122, 101, 114]"
+    },
+    {
+      "name": "shipmentSeed",
+      "type": "bytes",
+      "value": "[115, 104, 105, 112, 109, 101, 110, 116]"
     }
   ]
 };
