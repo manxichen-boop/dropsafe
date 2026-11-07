@@ -1,25 +1,28 @@
 import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import { Fredoka, Inter, JetBrains_Mono } from "next/font/google";
 import "@solana/wallet-adapter-react-ui/styles.css";
 import "./globals.css";
+import { Footer } from "@/components/Footer";
 import { Header } from "@/components/Header";
 import { Providers } from "@/components/Providers";
 
-const sans = Geist({ variable: "--font-geist-sans", subsets: ["latin"] });
-const mono = Geist_Mono({ variable: "--font-geist-mono", subsets: ["latin"] });
+const fredoka = Fredoka({ variable: "--font-fredoka", subsets: ["latin"] });
+const inter = Inter({ variable: "--font-inter", subsets: ["latin"] });
+const jetbrains = JetBrains_Mono({ variable: "--font-jetbrains", subsets: ["latin"] });
 
 export const metadata: Metadata = {
   title: "DropSafe",
-  description: "On-chain escrow for group buys on Solana. Miss the target and buyers take their SOL back.",
+  description: "Group buys on Solana Devnet where buyers pay into an escrow account with no private key.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${sans.variable} ${mono.variable}`}>
-      <body>
+    <html lang="en" className={`${fredoka.variable} ${inter.variable} ${jetbrains.variable}`}>
+      <body className="flex min-h-screen flex-col">
         <Providers>
           <Header />
-          <main className="mx-auto max-w-5xl px-4 py-10">{children}</main>
+          <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 md:py-12">{children}</main>
+          <Footer />
         </Providers>
       </body>
     </html>

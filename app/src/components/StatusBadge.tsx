@@ -1,20 +1,24 @@
-import { STATUS_LABEL, type DisplayStatus } from "@/lib/campaign";
+"use client";
 
-export const STATUS_TONE: Record<DisplayStatus, { badge: string; bar: string }> = {
-  open: { badge: "border-mint/40 bg-mint/10 text-mint", bar: "bg-mint" },
-  funded: { badge: "border-amber/40 bg-amber/10 text-amber", bar: "bg-amber" },
-  failed: { badge: "border-rose/40 bg-rose/10 text-rose", bar: "bg-rose" },
-  abandoned: { badge: "border-rose/40 bg-rose/10 text-rose", bar: "bg-rose" },
-  delivering: { badge: "border-amber/40 bg-amber/10 text-amber", bar: "bg-amber" },
-  dispute: { badge: "border-rose/40 bg-rose/10 text-rose", bar: "bg-rose" },
-  claimable: { badge: "border-amber/40 bg-amber/10 text-amber", bar: "bg-amber" },
-  completed: { badge: "border-line bg-line/50 text-muted", bar: "bg-muted" },
+import type { DisplayStatus } from "@/lib/campaign";
+import { useI18n } from "@/lib/i18n";
+
+const TONE: Record<DisplayStatus, string> = {
+  open: "bg-sun text-ink",
+  funded: "bg-safe text-ink",
+  failed: "bg-danger-tint text-danger-ink",
+  abandoned: "bg-danger-tint text-danger-ink",
+  delivering: "bg-sun-tint text-ink",
+  dispute: "bg-danger-tint text-danger-ink",
+  claimable: "bg-sun-tint text-ink",
+  completed: "bg-safe-tint text-safe-ink",
 };
 
 export function StatusBadge({ status }: { status: DisplayStatus }) {
+  const { t } = useI18n();
   return (
-    <span className={`whitespace-nowrap rounded-full border px-2.5 py-0.5 text-xs font-medium ${STATUS_TONE[status].badge}`}>
-      {STATUS_LABEL[status]}
+    <span className={`inline-block whitespace-nowrap rounded-lg px-2 py-1 text-xs font-semibold ${TONE[status]}`}>
+      {t.status[status]}
     </span>
   );
 }

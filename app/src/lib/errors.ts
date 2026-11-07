@@ -63,7 +63,7 @@ export function translateError(error: unknown): FriendlyError {
   if (/already been processed/i.test(text)) {
     return { zh: "这笔交易已经提交过了,请刷新页面查看。", en: "This transaction was already submitted. Refresh to check the result." };
   }
-  // 交易的 blockhash 只有约 60–90 秒有效,在钱包里停留太久就会过期
+  // 交易的 blockhash 只有约 60 到 90 秒有效,在钱包里停留太久就会过期
   if (/blockhash|expired|timeout/i.test(text)) {
     return {
       zh: "交易已过期,没有扣款。请重试,并在钱包弹窗出现后尽快确认。",

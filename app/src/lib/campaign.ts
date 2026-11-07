@@ -35,17 +35,6 @@ export function displayStatus(c: Campaign, nowSeconds: number): DisplayStatus {
   return "open";
 }
 
-export const STATUS_LABEL: Record<DisplayStatus, string> = {
-  open: "Fundraising",
-  funded: "Target reached",
-  failed: "Failed · refunds open",
-  abandoned: "Not withdrawn · refunds open",
-  delivering: "Awaiting delivery",
-  dispute: "Dispute window",
-  claimable: "Dispute window closed",
-  completed: "Completed",
-};
-
 // 这个状态下,倒计时应该指向哪个时间点。没有下一个时间点时返回 null
 export function nextDeadline(c: Campaign, status: DisplayStatus): number | null {
   switch (status) {
@@ -88,7 +77,6 @@ export function solToLamports(input: string): BN | null {
 }
 
 export function formatCountdown(secondsLeft: number): string {
-  if (secondsLeft <= 0) return "Ended";
   const d = Math.floor(secondsLeft / 86400);
   const h = Math.floor((secondsLeft % 86400) / 3600);
   const m = Math.floor((secondsLeft % 3600) / 60);

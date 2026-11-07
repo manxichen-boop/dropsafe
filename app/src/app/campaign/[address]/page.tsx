@@ -17,32 +17,30 @@ import {
 } from "@/lib/campaign";
 import { explorerAddress } from "@/lib/config";
 import { translateError, type FriendlyError } from "@/lib/errors";
+import { dateLocale, useI18n } from "@/lib/i18n";
+import { loadMeta, type CampaignMeta } from "@/lib/meta";
 import { contributionPda, escrowPda, useDropsafe } from "@/lib/program";
+import { ProductImage } from "@/components/CampaignCard";
+import { CalendarIcon, CoinIcon, JarIcon, PeopleIcon } from "@/components/icons";
+import { Lockie, type LockieMood } from "@/components/Lockie";
 import { ErrorNotice, SuccessNotice, WalletHint } from "@/components/Notice";
-import { ProgressBar } from "@/components/ProgressBar";
-import { StatusBadge, STATUS_TONE } from "@/components/StatusBadge";
+import { SeatBuddies } from "@/components/SeatBuddies";
+import { StatusBadge } from "@/components/StatusBadge";
 import { useNow } from "@/components/useNow";
 import { WalletButton } from "@/components/WalletButton";
 
 // 一笔交易放不下太多结算指令,一次最多领取这么多位买家的尾款
 const MAX_CLAIMS_PER_TX = 4;
 
-const STATUS_EXPLAINER: Record<DisplayStatus, string> = {
-  open: "Funds are locked in escrow. If the target isn't reached by the deadline, every buyer can take their SOL back.",
-  funded: "The target was reached. The organizer can now withdraw 70% to place the order. The last 30% stays in escrow.",
-  failed: "The target wasn't reached by the deadline. Every buyer can take their SOL back.",
-  abandoned: "The organizer didn't withdraw before the shipping deadline. Every buyer can take their full payment back.",
-  delivering: "The organizer has withdrawn 70%. The last 30% stays in escrow until buyers confirm delivery or the dispute window closes.",
-  dispute: "The shipping deadline has passed. Buyers who didn't receive their goods can report it now and take back their 30%.",
-  claimable: "The dispute window has closed. The organizer can claim the 30% from buyers who didn't report a problem.",
-  completed: "Every buyer's share has been settled. This campaign is complete.",
-};
-
-const STATUS_TIME_LABEL: Partial<Record<DisplayStatus, string>> = {
-  open: "Time left to join",
-  funded: "Time left to withdraw",
-  delivering: "Time left to ship",
-  dispute: "Time left to report",
+const MOOD: Record<DisplayStatus, LockieMood> = {
+  open: "waiting",
+  funded: "celebrating",
+  failed: "refunding",
+  abandoned: "refunding",
+  delivering: "guarding",
+  dispute: "guarding",
+  claimable: "paying",
+  completed: "paying",
 };
 
 function parseAddress(raw: string): PublicKey | null {
@@ -51,6 +49,70 @@ function parseAddress(raw: string): PublicKey | null {
   } catch {
     return null;
   }
+}
+
+function Timeline({ status }: { status: DisplayStatus }) {
+  const { t } = useI18n();
+  const failedPath = status === "failed" || status === "abandoned";
+  const steps = failedPath
+    ? [t.detail.stepRaising, t.detail.stepNotFilled, t.detail.stepRefund]
+    : [t.detail.stepRaising, t.detail.stepFunded, t.detail.stepReleased, t.detail.stepDone];
+  const current = failedPath
+    ? 2
+    : status === "open"
+      ? 0
+      : status === "funded"
+        ? 1
+        : status === "completed"
+          ? 3
+          : 2;
+  // 团长一直没提取的情况属于已成团,不是没凑满
+  const labels = status === "abandoned" ? [t.detail.stepRaising, t.detail.stepFunded, t.detail.stepRefund] : steps;
+
+  return (
+    <ol className="space-y-2">
+      {labels.map((label, i) => {
+        const done = i < current || (i === current && status === "completed");
+        const active = i === current && status !== "completed";
+        return (
+          <li key={label} aria-current={active ? "step" : undefined} className="flex items-center gap-3 text-sm">
+            <span
+              aria-hidden
+              className={`h-4 w-4 shrink-0 rounded-full border-[1.5px] ${
+                done
+                  ? "border-safe bg-safe"
+                  : active
+                    ? failedPath
+                      ? "border-danger bg-danger"
+                      : "border-ink bg-sun"
+                    : "border-line bg-surface"
+              }`}
+            />
+            <span className={active || done ? "font-semibold" : "text-muted"}>{label}</span>
+          </li>
+        );
+      })}
+    </ol>
+  );
+}
+
+function CopyAddress({ value }: { value: string }) {
+  const { t } = useI18n();
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(value);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setCopied(false);
+    }
+  };
+  return (
+    <button type="button" onClick={copy} className="min-h-9 shrink-0 rounded-xl border-[1.5px] border-line bg-bg px-3 text-sm font-medium hover:border-ink">
+      {copied ? t.detail.copied : t.detail.copy}
+    </button>
+  );
 }
 
 export default function CampaignPage({
@@ -67,6 +129,7 @@ export default function CampaignPage({
   const program = useDropsafe();
   const { publicKey } = useWallet();
   const now = useNow();
+  const { lang, t } = useI18n();
 
   const [campaign, setCampaign] = useState<Campaign | null | undefined>(undefined);
   const [escrowLamports, setEscrowLamports] = useState(0);
@@ -74,12 +137,15 @@ export default function CampaignPage({
   const [unconfirmedBuyers, setUnconfirmedBuyers] = useState<PublicKey[]>([]);
   const [loadFailed, setLoadFailed] = useState(false);
   const [pending, setPending] = useState(false);
+  const [meta, setMeta] = useState<CampaignMeta>({});
   const [success, setSuccess] = useState<{ title: string; signature?: string } | null>(
-    created ? { title: "Campaign created", signature: created } : null
+    created ? { title: "created", signature: created } : null
   );
   const [error, setError] = useState<FriendlyError | null>(null);
 
   const escrowKey = useMemo(() => (campaignKey ? escrowPda(campaignKey) : null), [campaignKey]);
+
+  useEffect(() => setMeta(loadMeta(address, lang)), [address, lang]);
 
   const refresh = useCallback(async () => {
     if (!campaignKey || !escrowKey) {
@@ -132,23 +198,24 @@ export default function CampaignPage({
     }
   };
 
-  if (campaign === undefined && !loadFailed) return <p className="py-12 text-center text-muted">Loading campaign…</p>;
+  if (campaign === undefined && !loadFailed) return <p className="py-12 text-center text-muted">{t.detail.loading}</p>;
   if (loadFailed && !campaign) {
     return (
       <div className="py-12 text-center">
-        <p className="text-rose">读取链上数据失败。 Couldn&apos;t load this campaign.</p>
-        <button onClick={refresh} className="mt-2 underline underline-offset-4">
-          Try again
+        <p className="text-danger-ink">{t.detail.loadFailed}</p>
+        <button onClick={refresh} className="mt-2 font-semibold underline underline-offset-4">
+          {t.detail.retry}
         </button>
       </div>
     );
   }
   if (!campaign || !campaignKey || !escrowKey) {
     return (
-      <div className="py-12 text-center">
-        <p className="text-muted">This campaign doesn&apos;t exist.</p>
-        <Link href="/" className="mt-2 inline-block text-mint underline underline-offset-4">
-          Back to all campaigns
+      <div className="flex flex-col items-center py-12 text-center">
+        <Lockie mood="sleeping" size={140} decorative />
+        <p className="mt-2 text-muted">{t.detail.notFound}</p>
+        <Link href="/" className="mt-2 font-semibold underline underline-offset-4">
+          {t.detail.backHome}
         </Link>
       </div>
     );
@@ -159,6 +226,8 @@ export default function CampaignPage({
   const next = nextDeadline(campaign, status);
   const price = formatSol(campaign.pricePerPersonLamports);
   const holdback = formatSol(holdbackPerBuyer(campaign));
+  const timeLabel = (t.detail.timeTo as Partial<Record<DisplayStatus, string>>)[status] ?? t.detail.timeNone;
+  const claimCount = Math.min(unconfirmedBuyers.length, MAX_CLAIMS_PER_TX);
   const buyerAccounts = () => ({
     buyer: publicKey!,
     campaign: campaignKey,
@@ -167,7 +236,7 @@ export default function CampaignPage({
   });
 
   const contribute = () =>
-    send("You joined the campaign", () =>
+    send(t.detail.done.joined, () =>
       program.methods
         .contribute()
         .accountsPartial({ ...buyerAccounts(), systemProgram: SystemProgram.programId })
@@ -175,12 +244,12 @@ export default function CampaignPage({
     );
 
   const refund = () =>
-    send("Your SOL is back in your wallet", () =>
+    send(t.detail.done.refunded, () =>
       program.methods.refund().accountsPartial(buyerAccounts()).rpc()
     );
 
   const release = () =>
-    send("70% withdrawn to your wallet", () =>
+    send(t.detail.done.withdrawn, () =>
       program.methods
         .release()
         .accountsPartial({ organizer: publicKey!, campaign: campaignKey, escrow: escrowKey })
@@ -188,7 +257,7 @@ export default function CampaignPage({
     );
 
   const confirmDelivery = () =>
-    send("Delivery confirmed. The organizer received your final 30%", () =>
+    send(t.detail.done.confirmed, () =>
       program.methods
         .confirmDelivery()
         .accountsPartial({ ...buyerAccounts(), organizer: campaign.organizer })
@@ -196,12 +265,12 @@ export default function CampaignPage({
     );
 
   const claimUndelivered = () =>
-    send("Your SOL is back in your wallet", () =>
+    send(t.detail.done.refunded, () =>
       program.methods.claimUndelivered().accountsPartial(buyerAccounts()).rpc()
     );
 
   const claimUnconfirmed = () =>
-    send("Unconfirmed shares claimed", async () => {
+    send(t.detail.done.claimed, async () => {
       // 第一位买家作为主指令,其余的放进同一笔交易,团长只需签一次
       const [first, ...rest] = unconfirmedBuyers.slice(0, MAX_CLAIMS_PER_TX);
       const accountsFor = (buyer: PublicKey) => ({
@@ -217,177 +286,220 @@ export default function CampaignPage({
       return program.methods.claimUnconfirmed().accountsPartial(accountsFor(first)).postInstructions(others).rpc();
     });
 
-  const primaryButton =
-    "w-full rounded-lg bg-mint py-3 font-medium text-[#06241a] transition-opacity hover:opacity-90 disabled:opacity-50";
-  const secondaryButton =
-    "w-full rounded-lg border border-rose/50 py-3 font-medium text-rose transition-colors hover:bg-rose/10 disabled:opacity-50";
+  const buttonClass = "btn-primary w-full px-3 py-3 text-base";
+  const secondaryClass = "btn-secondary w-full px-3 py-3 text-base";
 
-  const renderAction = () => {
-    if (!publicKey) {
-      return (
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <span className="text-sm text-muted">Connect a wallet to take part.</span>
-          <WalletButton />
-        </div>
-      );
-    }
-
-    const label = (text: string) => (pending ? "Confirm in your wallet…" : text);
+  const actionButtons = () => {
+    const label = (text: string) => (pending ? t.detail.pending : text);
     const buttons = [];
-
     if (status === "open" && !joined) {
       buttons.push(
-        <button key="join" onClick={contribute} disabled={pending} className={primaryButton}>
-          {label(`Join for ${price} SOL`)}
+        <button key="join" onClick={contribute} disabled={pending} className={buttonClass}>
+          {label(t.detail.join(price))}
         </button>
       );
     }
     if (status === "failed" && joined) {
       buttons.push(
-        <button key="refund" onClick={refund} disabled={pending} className={primaryButton}>
-          {label(`Get my ${price} SOL back`)}
+        <button key="refund" onClick={refund} disabled={pending} className={buttonClass}>
+          {label(t.detail.refund(price))}
         </button>
       );
     }
     if (status === "abandoned" && joined) {
       buttons.push(
-        <button key="full-refund" onClick={claimUndelivered} disabled={pending} className={primaryButton}>
-          {label(`Get my ${price} SOL back`)}
+        <button key="full-refund" onClick={claimUndelivered} disabled={pending} className={buttonClass}>
+          {label(t.detail.refund(price))}
         </button>
       );
     }
     if (status === "funded" && isOrganizer) {
       buttons.push(
-        <button key="release" onClick={release} disabled={pending} className={primaryButton}>
-          {label(`Withdraw 70% (${formatSol(upfrontTotal(campaign))} SOL)`)}
+        <button key="release" onClick={release} disabled={pending} className={buttonClass}>
+          {label(t.detail.withdraw(formatSol(upfrontTotal(campaign))))}
         </button>
       );
     }
     if ((status === "delivering" || status === "dispute" || status === "claimable") && joined) {
       buttons.push(
-        <button key="confirm" onClick={confirmDelivery} disabled={pending} className={primaryButton}>
-          {label(`I received my goods (release ${holdback} SOL to organizer)`)}
+        <button key="confirm" onClick={confirmDelivery} disabled={pending} className={buttonClass}>
+          {label(t.detail.confirm(holdback))}
         </button>
       );
     }
     if (status === "dispute" && joined) {
       buttons.push(
-        <button key="dispute" onClick={claimUndelivered} disabled={pending} className={secondaryButton}>
-          {label(`I didn't receive my goods (get ${holdback} SOL back)`)}
+        <button key="dispute" onClick={claimUndelivered} disabled={pending} className={secondaryClass}>
+          {label(t.detail.dispute(holdback))}
         </button>
       );
     }
-    if (status === "claimable" && isOrganizer && unconfirmedBuyers.length > 0) {
-      const count = Math.min(unconfirmedBuyers.length, MAX_CLAIMS_PER_TX);
+    if (status === "claimable" && isOrganizer && claimCount > 0) {
       buttons.push(
-        <button key="claim" onClick={claimUnconfirmed} disabled={pending} className={primaryButton}>
-          {label(`Claim ${count} unconfirmed ${count === 1 ? "share" : "shares"}`)}
+        <button key="claim" onClick={claimUnconfirmed} disabled={pending} className={buttonClass}>
+          {label(t.detail.claim(formatSol(holdbackPerBuyer(campaign).muln(claimCount)), claimCount))}
         </button>
       );
     }
-
-    if (buttons.length > 0) {
-      return (
-        <div className="space-y-3">
-          {buttons}
-          {pending && <WalletHint />}
-        </div>
-      );
-    }
-
-    return <p className="text-sm text-muted">{waitingMessage()}</p>;
+    return buttons;
   };
 
   const waitingMessage = () => {
     switch (status) {
       case "open":
-        return "You've joined. Your SOL is safe in escrow.";
+        return t.detail.wait.open;
       case "funded":
-        return joined ? "You've joined and the target was reached. Waiting for the organizer to withdraw." : "This campaign is full.";
+        return joined ? t.detail.wait.fundedJoined : t.detail.wait.fundedOther;
       case "failed":
       case "abandoned":
-        return "You have no SOL to claim in this campaign.";
+        return t.detail.wait.noClaim;
       case "delivering":
-        return isOrganizer ? "Ship the goods before the shipping deadline. Buyers can confirm delivery at any time." : "This campaign is awaiting delivery.";
+        return isOrganizer ? t.detail.wait.deliveringOrganizer : t.detail.wait.deliveringOther;
       case "dispute":
-        return isOrganizer ? "You can claim unconfirmed shares after the dispute window closes." : "You have no share to settle in this campaign.";
-      case "claimable":
-        return "Nothing left for you to do here.";
+        return isOrganizer ? t.detail.wait.disputeOrganizer : t.detail.wait.disputeOther;
       default:
-        return "Nothing left to do here.";
+        return t.detail.wait.nothing;
     }
   };
 
-  const timeline = [
-    { label: "Join by", at: campaign.deadlineUnixTs.toNumber() },
-    { label: "Ship by", at: campaign.deliveryDeadlineUnixTs.toNumber() },
-    { label: "Report problems by", at: campaign.disputeDeadlineUnixTs.toNumber() },
+  const buttons = publicKey ? actionButtons() : [];
+
+  const deadlines = [
+    { label: t.detail.joinBy, at: campaign.deadlineUnixTs.toNumber() },
+    { label: t.detail.shipBy, at: campaign.deliveryDeadlineUnixTs.toNumber() },
+    { label: t.detail.reportBy, at: campaign.disputeDeadlineUnixTs.toNumber() },
   ];
 
   return (
-    <div className="mx-auto max-w-2xl">
-      <Link href="/" className="text-sm text-muted transition-colors hover:text-ink">
-        ← All campaigns
+    <div className="pb-44 md:pb-0">
+      <Link href="/" className="text-sm font-medium underline-offset-4 hover:underline">
+        ← {t.detail.back}
       </Link>
 
-      <div className="mt-4 flex flex-wrap items-start justify-between gap-3">
-        <h1 className="min-w-0 break-words text-3xl font-semibold tracking-tight">{campaign.title || "Untitled"}</h1>
+      <div className="mt-3 flex flex-wrap items-start justify-between gap-3">
+        <h1 className="min-w-0 break-words font-display text-3xl font-semibold leading-tight md:text-4xl">{campaign.title}</h1>
         <StatusBadge status={status} />
       </div>
-      <p className="mt-2 text-muted">{STATUS_EXPLAINER[status]}</p>
 
-      <div className="mt-6 rounded-xl border border-line bg-surface p-5">
-        <div className="mb-2 flex justify-between font-mono text-sm">
-          <span>
-            {campaign.contributorCount} / {campaign.targetCount} joined
-          </span>
-          <span className="text-muted">{price} SOL / person</span>
+      <div className="mt-6 grid items-start gap-6 md:grid-cols-[1fr_400px]">
+        {/* 手机上购买卡片排在商品图下面,说明和资金面板往后放 */}
+        <div className="contents md:block md:space-y-6">
+          <div className="order-1">
+            <ProductImage meta={meta} title={campaign.title} large />
+            <p className="mt-4 leading-relaxed">{meta.description ?? t.detail.noDescription}</p>
+          </div>
+
+          <section className="card order-3 p-5">
+            <h2 className="font-display text-xl font-semibold">{t.detail.timeline}</h2>
+            <div className="mt-4">
+              <Timeline status={status} />
+            </div>
+            <dl className="mt-4 space-y-1.5 border-t-[1.5px] border-line pt-4 text-sm">
+              {deadlines.map((step) => (
+                <div key={step.label} className="flex flex-wrap justify-between gap-x-4">
+                  <dt className={now >= step.at ? "text-muted" : "font-medium"}>{step.label}</dt>
+                  <dd className="font-mono text-muted">{new Date(step.at * 1000).toLocaleString(dateLocale(lang))}</dd>
+                </div>
+              ))}
+            </dl>
+          </section>
+
+          <section className="card order-4 p-5">
+            <h2 className="flex items-center gap-2 font-display text-xl font-semibold">
+              <JarIcon size={28} />
+              {t.detail.fundsTitle}
+            </h2>
+            <p className="mt-2 text-sm leading-relaxed">{t.detail.fundsNote}</p>
+            <dl className="mt-4 space-y-3 text-sm">
+              <div>
+                <dt className="text-muted">{t.detail.fundsLocked}</dt>
+                <dd className="mt-0.5 font-mono text-xl font-medium">{formatSol(escrowLamports)} SOL</dd>
+              </div>
+              <div>
+                <dt className="text-muted">{t.detail.fundsAddress}</dt>
+                <dd className="mt-1 flex items-center justify-between gap-3">
+                  <code className="min-w-0 break-all font-mono text-sm">{escrowKey.toBase58()}</code>
+                  <CopyAddress value={escrowKey.toBase58()} />
+                </dd>
+              </div>
+              <div>
+                <dt className="text-muted">{isOrganizer ? t.detail.organizerYou : t.detail.organizer}</dt>
+                <dd className="mt-0.5 font-mono">{shortAddress(campaign.organizer.toBase58())}</dd>
+              </div>
+            </dl>
+            <a href={explorerAddress(escrowKey.toBase58())} target="_blank" rel="noreferrer" className="mt-4 inline-block text-sm font-semibold underline underline-offset-4">
+              {t.detail.explorer}
+            </a>
+          </section>
         </div>
-        <ProgressBar current={campaign.contributorCount} target={campaign.targetCount} tone={STATUS_TONE[status].bar} />
 
-        <dl className="mt-6 grid grid-cols-2 gap-4">
-          <div>
-            <dt className="text-sm text-muted">In escrow</dt>
-            <dd className="mt-1 font-mono text-2xl">{formatSol(escrowLamports)} SOL</dd>
-          </div>
-          <div>
-            <dt className="text-sm text-muted">{STATUS_TIME_LABEL[status] ?? "Timeline"}</dt>
-            <dd className="mt-1 font-mono text-2xl">{next === null ? "Ended" : formatCountdown(next - now)}</dd>
-          </div>
-        </dl>
+        <aside className="order-2 space-y-3 md:sticky md:top-4">
+          <div className="card p-5">
+            <div className="flex items-center gap-3">
+              <Lockie mood={MOOD[status]} size={88} className="shrink-0" />
+              <p className="text-sm leading-relaxed">{t.detail.explain[status]}</p>
+            </div>
 
-        <ol className="mt-6 space-y-1.5 border-t border-line pt-4 text-sm">
-          {timeline.map((step) => (
-            <li key={step.label} className="flex justify-between gap-4">
-              <span className={now >= step.at ? "text-muted line-through" : ""}>{step.label}</span>
-              <span className="font-mono text-muted">{new Date(step.at * 1000).toLocaleString()}</span>
-            </li>
-          ))}
-        </ol>
+            <dl className="mt-5 grid grid-cols-2 gap-4">
+              <div>
+                <dt className="flex items-center gap-1.5 text-sm text-muted">
+                  <CoinIcon size={20} />
+                  {t.detail.price}
+                </dt>
+                <dd className="mt-1 font-mono text-xl font-medium">{price} SOL</dd>
+              </div>
+              <div>
+                <dt className="flex items-center gap-1.5 text-sm text-muted">
+                  <CalendarIcon size={20} />
+                  {timeLabel}
+                </dt>
+                <dd className="mt-1 font-mono text-xl font-medium">{next === null || next <= now ? t.ended : formatCountdown(next - now)}</dd>
+              </div>
+            </dl>
+
+            <div className="mt-5">
+              <p className="mb-2 flex items-center gap-1.5 text-sm text-muted">
+                <PeopleIcon size={20} />
+                {t.detail.seats}: {t.home.joinedCount(campaign.contributorCount, campaign.targetCount)}
+              </p>
+              <SeatBuddies
+                campaign={address}
+                target={campaign.targetCount}
+                joined={campaign.contributorCount}
+                buyers={unconfirmedBuyers.map((buyer) => buyer.toBase58())}
+                size="lg"
+                hop={status === "funded"}
+                label={t.home.joinedCount(campaign.contributorCount, campaign.targetCount)}
+              />
+            </div>
+          </div>
+
+          {success && (
+            <SuccessNotice
+              title={success.title === "created" ? t.detail.done.created : success.title}
+              signature={success.signature}
+            />
+          )}
+          {error && <ErrorNotice error={error} />}
+
+          {/* 主按钮:手机上固定在屏幕底部,桌面上跟在卡片下面 */}
+          <div className="fixed inset-x-0 bottom-0 z-20 space-y-3 border-t-[1.5px] border-line bg-surface p-4 md:static md:rounded-[20px] md:border-[1.5px]">
+            {!publicKey ? (
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <span className="text-sm">{t.detail.connect}</span>
+                <WalletButton />
+              </div>
+            ) : buttons.length > 0 ? (
+              <>
+                {buttons}
+                {pending && <WalletHint />}
+              </>
+            ) : (
+              <p className="text-sm">{waitingMessage()}</p>
+            )}
+          </div>
+        </aside>
       </div>
-
-      <div className="mt-4 space-y-3">
-        {success && <SuccessNotice title={success.title} signature={success.signature} />}
-        {error && <ErrorNotice error={error} />}
-        <div className="rounded-xl border border-line bg-surface p-5">{renderAction()}</div>
-      </div>
-
-      <dl className="mt-6 space-y-2 text-sm">
-        {[
-          { label: isOrganizer ? "Organizer (you)" : "Organizer", value: campaign.organizer.toBase58() },
-          { label: "Escrow account", value: escrowKey.toBase58() },
-          { label: "Campaign account", value: campaignKey.toBase58() },
-        ].map((row) => (
-          <div key={row.label} className="flex justify-between gap-4">
-            <dt className="text-muted">{row.label}</dt>
-            <dd>
-              <a href={explorerAddress(row.value)} target="_blank" rel="noreferrer" className="font-mono underline underline-offset-4">
-                {shortAddress(row.value)} ↗
-              </a>
-            </dd>
-          </div>
-        ))}
-      </dl>
     </div>
   );
 }

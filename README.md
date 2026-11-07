@@ -102,6 +102,8 @@ This runs 27 tests on a local validator. `npm test` runs `anchor test --validato
 
 ### Configuration
 
+The app has an EN / 中文 switch in the navigation bar. Product images and descriptions are saved only in the creator's browser, because the program stores neither. Open `/create?demo=1` to use 2-minute shipping and dispute windows for a demo.
+
 The program ID and RPC URL live in [`app/src/lib/config.ts`](app/src/lib/config.ts).
 
 ## Known limits

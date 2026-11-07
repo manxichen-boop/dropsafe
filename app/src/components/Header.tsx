@@ -1,24 +1,44 @@
+"use client";
+
 import Link from "next/link";
+import { useI18n, type Lang } from "@/lib/i18n";
+import { JarIcon } from "./icons";
 import { WalletButton } from "./WalletButton";
 
+const LANGUAGES: { value: Lang; label: string }[] = [
+  { value: "en", label: "EN" },
+  { value: "zh", label: "中文" },
+];
+
 export function Header() {
+  const { lang, setLang, t } = useI18n();
   return (
-    <header className="border-b border-line">
-      <div className="mx-auto flex max-w-5xl flex-wrap items-center gap-x-5 gap-y-3 px-4 py-4">
-        <Link href="/" className="flex items-center gap-2 font-semibold tracking-tight">
-          <svg aria-hidden width="22" height="22" viewBox="0 0 24 24" fill="none" className="text-mint">
-            <path d="M12 2.5 4 5.5v6c0 5 3.4 8.6 8 10 4.6-1.4 8-5 8-10v-6l-8-3Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
-            <path d="m8.5 12 2.5 2.5 4.5-5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-          </svg>
+    <header className="border-b-[1.5px] border-line bg-surface">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3">
+        <Link href="/" className="flex items-center gap-2 font-display text-xl font-semibold">
+          <JarIcon size={32} />
           DropSafe
         </Link>
-        <span className="rounded-full border border-amber/40 bg-amber/10 px-2.5 py-0.5 text-xs font-medium text-amber">
-          Devnet
-        </span>
-        <div className="ml-auto flex items-center gap-4">
-          <Link href="/create" className="text-sm text-muted transition-colors hover:text-ink">
-            Create campaign
+        <span className="rounded-lg bg-sun px-2 py-1 text-xs font-semibold">{t.nav.devnet}</span>
+        <div className="ml-auto flex flex-wrap items-center justify-end gap-3">
+          <Link href="/create" className="hidden text-sm font-medium underline-offset-4 hover:underline sm:inline">
+            {t.nav.create}
           </Link>
+          <div role="group" aria-label={t.nav.languageLabel} className="flex rounded-xl border-[1.5px] border-line p-0.5">
+            {LANGUAGES.map((option) => (
+              <button
+                key={option.value}
+                type="button"
+                aria-pressed={lang === option.value}
+                onClick={() => setLang(option.value)}
+                className={`min-h-8 rounded-[10px] px-2.5 text-sm font-medium ${
+                  lang === option.value ? "bg-ink text-bg" : "text-ink hover:bg-line"
+                }`}
+              >
+                {option.label}
+              </button>
+            ))}
+          </div>
           <WalletButton />
         </div>
       </div>

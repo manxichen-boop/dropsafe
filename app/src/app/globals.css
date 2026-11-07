@@ -1,16 +1,25 @@
 @import "tailwindcss";
 
 @theme {
-  --color-bg: #0c1110;
-  --color-surface: #141b19;
-  --color-line: #27322f;
-  --color-ink: #e9f0ed;
-  --color-muted: #94a39e;
-  --color-mint: #5fe3b8;
-  --color-amber: #f2b84b;
-  --color-rose: #f58b8b;
-  --font-sans: var(--font-geist-sans), "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
-  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+  --color-bg: #fbf7f1;
+  --color-surface: #fffdf9;
+  --color-ink: #1f1d1a;
+  --color-muted: #625b50;
+  --color-line: #e8e1d6;
+  --color-tomato: #ff6b3d;
+  --color-tomato-edge: #c94a20;
+  --color-tomato-ink: #a83a14;
+  --color-safe: #2bb673;
+  --color-safe-ink: #12683f;
+  --color-safe-tint: #dcf4e7;
+  --color-sun: #ffc93c;
+  --color-sun-tint: #fff2c9;
+  --color-danger: #e5484d;
+  --color-danger-ink: #ad1f26;
+  --color-danger-tint: #fce4e4;
+  --font-display: var(--font-fredoka), "PingFang SC", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-sans: var(--font-inter), "PingFang SC", "Noto Sans SC", "Microsoft YaHei", system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
 }
 
 body {
@@ -19,27 +28,180 @@ body {
   font-family: var(--font-sans);
 }
 
-input,
-select {
-  color-scheme: dark;
+:focus-visible {
+  outline: 3px solid var(--color-ink);
+  outline-offset: 2px;
+  border-radius: 8px;
 }
 
+/* 卡片:实色背景 + 1.5px 边框 + 轻阴影 + 20px 圆角 */
+.card {
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-line);
+  border-radius: 20px;
+  box-shadow: 0 2px 0 var(--color-line);
+}
+
+/* 主按钮:番茄橙底 + 深色字(白字达不到 AA),底边做出按键的厚度 */
+.btn-primary {
+  background: var(--color-tomato);
+  color: var(--color-ink);
+  border-radius: 16px;
+  box-shadow: 0 4px 0 var(--color-tomato-edge);
+  font-family: var(--font-display);
+  font-weight: 600;
+  transition: transform 80ms, box-shadow 80ms;
+}
+.btn-primary:hover:not(:disabled) {
+  background: #ff7d55;
+}
+.btn-primary:active:not(:disabled) {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 var(--color-tomato-edge);
+}
+.btn-primary:disabled {
+  opacity: 0.6;
+}
+
+.btn-secondary {
+  background: var(--color-surface);
+  color: var(--color-danger-ink);
+  border: 1.5px solid var(--color-danger);
+  border-radius: 16px;
+  box-shadow: 0 3px 0 var(--color-danger-tint);
+  font-family: var(--font-display);
+  font-weight: 600;
+}
+.btn-secondary:disabled {
+  opacity: 0.6;
+}
+
+.field {
+  width: 100%;
+  background: var(--color-surface);
+  border: 1.5px solid #8a8173;
+  border-radius: 12px;
+  padding: 12px;
+  color: var(--color-ink);
+}
+.field::placeholder {
+  color: var(--color-muted);
+}
+.field[aria-invalid="true"] {
+  border-color: var(--color-danger);
+}
+
+/* Lockie 的动作都很轻:偶尔眨眼、微微起伏 */
+.lockie-eyes {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: lockie-blink 6s infinite;
+}
+@keyframes lockie-blink {
+  0%, 95%, 100% { transform: scaleY(1); }
+  97.5% { transform: scaleY(0.08); }
+}
+.lockie-bob {
+  animation: lockie-bob 4s ease-in-out infinite;
+}
+@keyframes lockie-bob {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-3px); }
+}
+.lockie-hop {
+  animation: lockie-hop 700ms ease-out 2;
+}
+@keyframes lockie-hop {
+  0%, 100% { transform: translateY(0); }
+  40% { transform: translateY(-14px); }
+}
+
+.seat-hop {
+  animation: seat-hop 600ms ease-out 1;
+}
+@keyframes seat-hop {
+  0%, 100% { transform: translateY(0); }
+  45% { transform: translateY(-8px); }
+}
+
+.coin-burst {
+  animation: coin-burst 900ms ease-out both;
+}
+@keyframes coin-burst {
+  0% { transform: translate(0, 8px) scale(0.5); opacity: 0; }
+  30% { opacity: 1; }
+  100% { transform: translate(var(--dx), var(--dy)) scale(1); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .lockie-eyes, .lockie-bob, .lockie-hop, .seat-hop, .coin-burst {
+    animation: none;
+  }
+  .coin-burst {
+    opacity: 0;
+  }
+}
+
+/* 钱包组件:换成项目自己的样式 */
 .wallet-adapter-button {
-  height: 38px;
-  border-radius: 8px;
-  font-family: inherit;
+  height: 40px;
+  border-radius: 12px;
+  font-family: var(--font-display);
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   line-height: 1;
   padding: 0 14px;
 }
-
 .wallet-adapter-button-trigger {
-  background: var(--color-mint);
-  color: #06241a;
+  background: var(--color-ink);
+  color: var(--color-bg);
 }
-
 .wallet-adapter-button:not([disabled]):hover {
-  background: #7cebc7;
-  color: #06241a;
+  background: #3a3630;
+  color: var(--color-bg);
+}
+.wallet-adapter-dropdown-list {
+  background: var(--color-surface);
+  border: 1.5px solid var(--color-line);
+  border-radius: 16px;
+  box-shadow: 0 4px 0 var(--color-line);
+}
+.wallet-adapter-dropdown-list-item {
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+.wallet-adapter-dropdown-list-item:not([disabled]):hover {
+  background: var(--color-line);
+}
+.wallet-adapter-modal-wrapper {
+  background: var(--color-surface);
+  border-radius: 20px;
+  box-shadow: 0 8px 0 var(--color-line);
+}
+.wallet-adapter-modal-title {
+  color: var(--color-ink);
+  font-family: var(--font-display);
+}
+.wallet-adapter-modal-list .wallet-adapter-button {
+  background: var(--color-bg);
+  color: var(--color-ink);
+}
+.wallet-adapter-modal-list .wallet-adapter-button:not([disabled]):hover {
+  background: var(--color-line);
+  color: var(--color-ink);
+}
+.wallet-adapter-modal-list-more,
+.wallet-adapter-modal-list-more svg {
+  color: var(--color-ink);
+  fill: var(--color-ink);
+}
+.wallet-adapter-modal-button-close {
+  background: var(--color-line);
+}
+.wallet-adapter-modal-button-close svg {
+  fill: var(--color-ink);
+}
+.wallet-adapter-modal-fade {
+  background: rgb(31 29 26 / 0.5);
+  backdrop-filter: none;
 }
