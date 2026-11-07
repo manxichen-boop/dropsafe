@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useWallet } from "@solana/wallet-adapter-react";
 import { useWalletModal } from "@solana/wallet-adapter-react-ui";
 import { useI18n } from "@/lib/i18n";
-import { drawLockie, FRAME_PATTERN, type IconName } from "@/lib/pixels";
+import { drawFairIsle, FRAME_PATTERN, gridToSvg, type IconName } from "@/lib/pixels";
 import { CampaignWindow } from "@/components/windows/CampaignWindow";
 import { ActivityWindow } from "@/components/windows/ActivityWindow";
 import { EscrowMonitorWindow } from "@/components/windows/EscrowMonitorWindow";
@@ -16,7 +16,6 @@ import { WalletWindow } from "@/components/windows/WalletWindow";
 import { DesktopIcon } from "./icons";
 import { MenuBar } from "./MenuBar";
 import { useOS, type OSWindow, type WindowKind } from "./OS";
-import { PixelGrid } from "./Pixel";
 import { SystemDialog } from "./SystemDialog";
 import { ICON_OF, titleFor } from "./titles";
 import { Window } from "./Window";
@@ -52,16 +51,17 @@ const CORNER_ICONS: { icon: IconName; kind: WindowKind }[] = [
   { icon: "privacy", kind: "privacy" },
 ];
 
-// 桌面壁纸:超大的抖动像素 Lockie,6% 透明度
+// 桌面壁纸:费尔岛花纹,每一针放大成 4 像素
 function Wallpaper() {
-  const grid = useMemo(() => {
-    const g = drawLockie("guarding", 64, 0);
-    return g.map((row, y) => row.map((c, x) => ((x + y) % 2 === 0 ? c : null)));
+  const url = useMemo(() => {
+    const svg = gridToSvg(drawFairIsle()).replace(/</g, "%3C").replace(/>/g, "%3E").replace(/#/g, "%23");
+    return `url("data:image/svg+xml,${svg}")`;
   }, []);
   return (
-    <svg viewBox="0 0 64 64" shapeRendering="crispEdges" aria-hidden className="pointer-events-none absolute left-1/2 top-1/2 h-[90%] max-h-[720px] -translate-x-1/2 -translate-y-1/2 opacity-[0.06]">
-      <PixelGrid grid={grid} />
-    </svg>
+    // 米色底上铺半透明花纹:颜色柔和一点,桌面图标和文字仍然看得清
+    <div aria-hidden className="pointer-events-none absolute inset-0 bg-line">
+      <div className="absolute inset-0 opacity-55 [image-rendering:pixelated]" style={{ backgroundImage: url, backgroundSize: "64px 176px" }} />
+    </div>
   );
 }
 

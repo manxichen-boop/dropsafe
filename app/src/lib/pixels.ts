@@ -421,3 +421,67 @@ export function drawProduct(kind: ProductKind): Grid {
   }
   return outline(grid);
 }
+
+// 桌面壁纸:费尔岛毛衣式的横向花纹带,主花纹是一排小 Lockie。
+// 一块花纹 16 x 44 针,横竖都能无缝重复
+const MINI_LOCKIE = [
+  "...TTTTT...",
+  ".TTTTTTTTT.",
+  "TTTTTTTTTTT",
+  "TTKTTTTTKTT",
+  "TTTTTTTTTTT",
+  "TTTTPPPTTTT",
+  "TTTPPPPPTTT",
+  ".TTTPPPTTT.",
+  "..TTTTTTT..",
+  "..TT...TT..",
+];
+
+export function drawFairIsle(): Grid {
+  const W = 16;
+  const H = 44;
+  const rows: Grid = Array.from({ length: H }, () => Array<string | null>(W).fill(LINE));
+  const band = (y0: number, bg: string, fg: string) => {
+    // 五针高的小菱形带
+    for (let x = 0; x < W; x++) for (let y = y0; y < y0 + 5; y++) rows[y][x] = bg;
+    for (let x = 0; x < W; x++) {
+      if (x % 4 === 2) rows[y0 + 1][x] = fg;
+      if (x % 4 === 1 || x % 4 === 3) rows[y0 + 2][x] = fg;
+      if (x % 4 === 2) rows[y0 + 3][x] = fg;
+    }
+  };
+  for (let x = 0; x < W; x += 2) rows[1][x] = GRAY;
+  band(3, TOMATO, SUN);
+  // 主花纹带:黄底,一排 Lockie 抱着硬币,中间夹一个小十字
+  for (let y = 9; y < 23; y++) for (let x = 0; x < W; x++) rows[y][x] = SUN;
+  const colors: Record<string, string> = { T: TOMATO, K: INK, P: PAPER };
+  MINI_LOCKIE.forEach((line, dy) =>
+    [...line].forEach((ch, dx) => {
+      if (ch !== ".") rows[11 + dy][2 + dx] = colors[ch];
+    })
+  );
+  for (const [x, y] of [[14, 14], [14, 15], [14, 16], [13, 15], [15, 15]]) rows[y][x] = TOMATO;
+  band(24, SAFE, PAPER);
+  // 花纹带之间留一段米色,稀疏的小点像毛衣上的间隔花
+  for (let x = 4; x < W; x += 8) rows[33][x] = GRAY;
+  for (let x = 0; x < W; x += 8) rows[38][x] = GRAY;
+  return rows;
+}
+
+// 把网格变成可以平铺的 SVG(每一针一个方块)
+export function gridToSvg(grid: Grid): string {
+  const h = grid.length;
+  const w = grid[0].length;
+  let rects = "";
+  grid.forEach((row, y) => {
+    let x = 0;
+    while (x < w) {
+      const c = row[x];
+      let run = 1;
+      while (x + run < w && row[x + run] === c) run++;
+      if (c) rects += `<rect x='${x}' y='${y}' width='${run}' height='1' fill='${c}'/>`;
+      x += run;
+    }
+  });
+  return `<svg xmlns='http://www.w3.org/2000/svg' width='${w}' height='${h}' shape-rendering='crispEdges'>${rects}</svg>`;
+}
