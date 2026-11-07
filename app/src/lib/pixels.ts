@@ -439,12 +439,12 @@ const MINI_LOCKIE = [
 
 // 牛皮纸色系:饱和度低,花纹只比底色深浅一点,不抢视线
 const KRAFT = {
-  base: "#D9CAAA",
-  light: "#E4D8BE",
-  band: "#CFBE9A",
-  main: "#CBB993",
-  motif: "#B9A47D",
-  dark: "#A08B66",
+  base: "#D3C8B0",
+  light: "#DFD6C3",
+  band: "#C8BBA1",
+  main: "#C3B69B",
+  motif: "#AFA187",
+  dark: "#948872",
 };
 
 export function drawFairIsle(): Grid {
