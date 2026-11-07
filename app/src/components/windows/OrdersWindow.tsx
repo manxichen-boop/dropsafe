@@ -38,7 +38,10 @@ const BUYER_ACTIONS = new Set([
   "extendWaiting",
   "settleSeat",
 ]);
-const PAGE = 25;
+// 公共 Devnet RPC 对 getTransaction 限流很紧:每页少读一点,读之间留间隔
+const PAGE = 10;
+const GAP_MS = 400;
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const camel = (name: string) => name.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
 
 export function OrdersWindow() {
@@ -104,9 +107,25 @@ export function OrdersWindow() {
         const connection = program.provider.connection;
         const signatures = await connection.getSignaturesForAddress(owner, { limit: PAGE, before }, "confirmed");
         const found: HistoryEntry[] = [];
+        // 被限流时等一会儿重试;还是读不到就停在这里,保留已读到的,下次从这里接着读
+        let stoppedAt: string | undefined;
         for (const { signature, err, blockTime } of signatures) {
           if (err) continue;
-          const tx = await chainRead(`tx-${signature}`, () => connection.getTransaction(signature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 }));
+          let tx: Awaited<ReturnType<typeof connection.getTransaction>> = null;
+          let ok = false;
+          for (let attempt = 0; attempt < 3 && !ok; attempt++) {
+            try {
+              await sleep(attempt === 0 ? GAP_MS : 1500 * attempt);
+              tx = await chainRead(`tx-${signature}`, () => connection.getTransaction(signature, { commitment: "confirmed", maxSupportedTransactionVersion: 0 }));
+              ok = true;
+            } catch {
+              ok = false;
+            }
+          }
+          if (!ok) {
+            stoppedAt = signature;
+            break;
+          }
           if (!tx?.meta) continue;
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           const message = tx.transaction.message as any;
@@ -154,6 +173,13 @@ export function OrdersWindow() {
           }
         }
         setHistory((prev) => [...prev, ...found]);
+        if (stoppedAt) {
+          // 从没读到的那一笔重新开始:before 取它前面那一笔
+          const index = signatures.findIndex((x) => x.signature === stoppedAt);
+          setCursor(index > 0 ? signatures[index - 1].signature : before);
+          setHistoryState("idle");
+          return;
+        }
         setCursor(signatures.length === PAGE ? signatures[signatures.length - 1].signature : undefined);
         setHistoryState(signatures.length === PAGE ? "idle" : "done");
       } catch (e) {
@@ -280,7 +306,7 @@ export function OrdersWindow() {
           ))}
         </div>
         {historyState === "loading" && <p className="mt-2 text-[13px]">{o.historyLoading}</p>}
-        {historyState === "idle" && cursor && (
+        {historyState === "idle" && (cursor || history.length === 0) && (
           <button type="button" className="btn mt-2 w-full" onClick={() => void loadHistory(publicKey, cursor)}>
             {o.more}
           </button>
