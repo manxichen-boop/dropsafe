@@ -37,7 +37,7 @@ export function WalletWindow() {
             </div>
             <div>
               <dt className="text-[13px]">{w.balance}</dt>
-              <dd className="pixel-title text-2xl">{balance === null ? "…" : `${formatSol(balance)} SOL`}</dd>
+              <dd className="pixel-num text-2xl">{balance === null ? "…" : `${formatSol(balance)} SOL`}</dd>
             </div>
           </dl>
           <div className="mt-4 grid gap-3">

@@ -67,7 +67,7 @@ export function EscrowMonitorWindow() {
           {rows.map((row) => (
             <div key={row.label} className="panel flex flex-wrap items-baseline justify-between gap-2">
               <dt>{row.label}</dt>
-              <dd className="pixel-title text-4xl leading-none">{row.value ?? "…"}</dd>
+              <dd className="pixel-num text-4xl leading-none">{row.value ?? "…"}</dd>
             </div>
           ))}
         </dl>

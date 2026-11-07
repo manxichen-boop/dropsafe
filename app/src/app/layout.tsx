@@ -7,7 +7,7 @@ import { OSProvider } from "@/components/os/OS";
 import { Providers } from "@/components/Providers";
 
 const pixelify = Pixelify_Sans({ variable: "--font-pixelify", subsets: ["latin"], weight: ["400", "600", "700"] });
-const plex = IBM_Plex_Mono({ variable: "--font-plex", subsets: ["latin"], weight: ["400", "500", "600"] });
+const plex = IBM_Plex_Mono({ variable: "--font-plex", subsets: ["latin"], weight: ["400", "500", "600", "700"] });
 
 export const metadata: Metadata = {
   title: "DropSafe OS",

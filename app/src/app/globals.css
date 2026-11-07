@@ -229,6 +229,14 @@ body {
   font-weight: 600;
 }
 
+/* 大号数字:像素字体的 3 和 8 太像,数字改用等宽字体 */
+.pixel-num {
+  font-family: var(--font-mono);
+  font-weight: 700;
+  font-variant-numeric: tabular-nums slashed-zero;
+  letter-spacing: -0.02em;
+}
+
 /* 桌面图标 */
 .desk-icon {
   width: 92px;

@@ -434,11 +434,11 @@ export function CampaignWindow({ address }: { address: string }) {
           <dl className="grid grid-cols-2 gap-3">
             <div>
               <dt className="text-[13px]">{d.price}</dt>
-              <dd className="pixel-title text-xl">{price} SOL</dd>
+              <dd className="pixel-num text-xl">{price} SOL</dd>
             </div>
             <div>
               <dt className="text-[13px]">{timeLabel}</dt>
-              <dd className="pixel-title text-xl">{next === null || next <= now ? t.ended : formatCountdown(next - now)}</dd>
+              <dd className="pixel-num text-xl">{next === null || next <= now ? t.ended : formatCountdown(next - now)}</dd>
             </div>
           </dl>
           <p className="text-[13px]">{d.lockedUntil(formatDate(campaign.appealEnd.toNumber()))}</p>
