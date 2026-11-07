@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import type { PublicKey } from "@solana/web3.js";
 import { formatSol, TIERS, tierOf, type Campaign, type TierName } from "@/lib/campaign";
+import { chainRead } from "@/lib/chain";
 import { useI18n } from "@/lib/i18n";
 import { escrowPda, seatsByCampaign, useDropsafe } from "@/lib/program";
 import { CampaignCard } from "@/components/CampaignCard";
@@ -30,12 +31,15 @@ export default function HomePage() {
     setFailed(false);
     try {
       const connection = program.provider.connection;
-      const [campaigns, seats, organizers, buyers] = await Promise.all([
-        program.account.campaign.all(),
-        program.account.contribution.all(),
-        program.account.organizerStats.all(),
-        program.account.buyerStats.all(),
+      const [campaigns, seats] = await Promise.all([
+        chainRead("campaigns", () => program.account.campaign.all()),
+        chainRead("seats", () => program.account.contribution.all()),
       ]);
+
+      // 开发时留下的测试活动删不掉,只在首页隐藏,详情页仍可直接打开。
+      // 列表不依赖统计数据,统计读取失败也要先把列表显示出来
+      const visible = campaigns.filter((row) => !row.account.title.startsWith("Test:"));
+      setRows(visible.sort((a, b) => b.account.campaignId.cmp(a.account.campaignId)));
 
       const grouped = seatsByCampaign(campaigns.map((row) => row.publicKey), seats);
       setBuyersByCampaign(
@@ -53,6 +57,10 @@ export default function HomePage() {
           for (const info of live) lockedLamports += info.lamports - rent;
         }
       }
+      const [organizers, buyers] = await Promise.all([
+        chainRead("organizer-stats", () => program.account.organizerStats.all()),
+        chainRead("buyer-stats", () => program.account.buyerStats.all()),
+      ]);
       setStats({
         lockedSol: formatSol(lockedLamports),
         funded: organizers.reduce(
@@ -61,10 +69,6 @@ export default function HomePage() {
         ),
         refunds: buyers.reduce((sum, { account }) => sum + account.seatsRefunded.toNumber(), 0),
       });
-
-      // 开发时留下的测试活动删不掉,只在首页隐藏,详情页仍可直接打开
-      const visible = campaigns.filter((row) => !row.account.title.startsWith("Test:"));
-      setRows(visible.sort((a, b) => b.account.campaignId.cmp(a.account.campaignId)));
     } catch (e) {
       console.warn(e);
       setFailed(true);

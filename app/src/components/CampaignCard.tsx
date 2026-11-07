@@ -18,7 +18,7 @@ export function ProductImage({ url, title, large = false }: { url: string; title
         // eslint-disable-next-line @next/next/no-img-element
         <img src={src} alt={title} referrerPolicy="no-referrer" className="h-full w-full object-cover" onError={() => setBroken(true)} />
       ) : (
-        <Lockie mood="guarding" size={large ? 260 : 136} decorative />
+        <Lockie mood="guarding" size={large ? 200 : 120} decorative />
       )}
     </div>
   );

@@ -15,6 +15,7 @@ import {
   utf8Length,
   type TierName,
 } from "@/lib/campaign";
+import { clearChainCache } from "@/lib/chain";
 import { translateError, type FriendlyError } from "@/lib/errors";
 import { useI18n } from "@/lib/i18n";
 import { campaignPda, escrowPda, organizerStatsPda, useDropsafe } from "@/lib/program";
@@ -196,6 +197,7 @@ export default function CreatePage() {
           systemProgram: SystemProgram.programId,
         })
         .rpc();
+      clearChainCache();
       router.push(`/campaign/${campaign.toBase58()}?created=${signature}`);
     } catch (e) {
       console.warn(e);

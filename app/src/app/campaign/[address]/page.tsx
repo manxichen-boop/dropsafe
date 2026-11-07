@@ -21,6 +21,7 @@ import {
   type Contribution,
   type DisplayStatus,
 } from "@/lib/campaign";
+import { chainRead, clearChainCache } from "@/lib/chain";
 import { explorerAddress } from "@/lib/config";
 import { translateError, type FriendlyError } from "@/lib/errors";
 import { dateLocale, useI18n } from "@/lib/i18n";
@@ -150,7 +151,7 @@ export default function CampaignPage({
       const [account, escrowInfo, allSeats] = await Promise.all([
         program.account.campaign.fetchNullable(campaignKey),
         connection.getAccountInfo(escrowKey),
-        program.account.contribution.all(),
+        chainRead("seats", () => program.account.contribution.all()),
       ]);
       setCampaign(account);
       const mine = seatsByCampaign([campaignKey], allSeats)[campaignKey.toBase58()] ?? [];
@@ -184,6 +185,7 @@ export default function CampaignPage({
     try {
       const signature = await build();
       setSuccess({ title, signature });
+      clearChainCache();
       await refresh();
     } catch (e) {
       console.warn(e);

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { use, useCallback, useEffect, useMemo, useState } from "react";
 import { PublicKey } from "@solana/web3.js";
 import type { BuyerStats, Campaign } from "@/lib/campaign";
+import { chainRead } from "@/lib/chain";
 import { useI18n } from "@/lib/i18n";
 import { buyerStatsPda, contributionPda, useDropsafe } from "@/lib/program";
 import { Lockie } from "@/components/Lockie";
@@ -34,9 +35,9 @@ export default function BuyerPage({ params }: { params: Promise<{ address: strin
     try {
       const [record, campaigns, seats] = await Promise.all([
         program.account.buyerStats.fetchNullable(buyerStatsPda(key)),
-        program.account.campaign.all(),
+        chainRead("campaigns", () => program.account.campaign.all()),
         // buyer 字段紧跟在 8 字节的账户标识后面
-        program.account.contribution.all([{ memcmp: { offset: 8, bytes: key.toBase58() } }]),
+        chainRead(`seats-of-${address}`, () => program.account.contribution.all([{ memcmp: { offset: 8, bytes: key.toBase58() } }])),
       ]);
       setStats(record);
       const mine = new Set(seats.map((seat) => seat.publicKey.toBase58()));
@@ -45,7 +46,7 @@ export default function BuyerPage({ params }: { params: Promise<{ address: strin
       console.warn(e);
       setFailed(true);
     }
-  }, [key, program]);
+  }, [address, key, program]);
 
   useEffect(() => {
     load();

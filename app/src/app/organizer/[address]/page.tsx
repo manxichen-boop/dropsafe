@@ -4,6 +4,7 @@ import Link from "next/link";
 import { use, useCallback, useEffect, useMemo, useState } from "react";
 import { PublicKey } from "@solana/web3.js";
 import { formatSol, shortAddress, TIERS, type Campaign, type OrganizerStats } from "@/lib/campaign";
+import { chainRead } from "@/lib/chain";
 import { useI18n } from "@/lib/i18n";
 import { organizerStatsPda, seatsByCampaign, useDropsafe } from "@/lib/program";
 import { CampaignCard } from "@/components/CampaignCard";
@@ -51,8 +52,8 @@ export default function OrganizerPage({ params }: { params: Promise<{ address: s
       const [record, campaigns, seats] = await Promise.all([
         program.account.organizerStats.fetchNullable(organizerStatsPda(key)),
         // organizer 字段紧跟在 8 字节的账户标识后面
-        program.account.campaign.all([{ memcmp: { offset: 8, bytes: key.toBase58() } }]),
-        program.account.contribution.all(),
+        chainRead(`campaigns-of-${address}`, () => program.account.campaign.all([{ memcmp: { offset: 8, bytes: key.toBase58() } }])),
+        chainRead("seats", () => program.account.contribution.all()),
       ]);
       setStats(record);
       setRows(campaigns.sort((a, b) => b.account.campaignId.cmp(a.account.campaignId)));
@@ -62,7 +63,7 @@ export default function OrganizerPage({ params }: { params: Promise<{ address: s
       console.warn(e);
       setFailed(true);
     }
-  }, [key, program]);
+  }, [address, key, program]);
 
   useEffect(() => {
     load();
