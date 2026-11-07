@@ -10,6 +10,7 @@ import { ActivityWindow } from "@/components/windows/ActivityWindow";
 import { EscrowMonitorWindow } from "@/components/windows/EscrowMonitorWindow";
 import { GroupBuysWindow } from "@/components/windows/GroupBuysWindow";
 import { NewGroupBuyWindow } from "@/components/windows/NewGroupBuyWindow";
+import { OrdersWindow } from "@/components/windows/OrdersWindow";
 import { BuyerWindow, OrganizerWindow } from "@/components/windows/RecordWindows";
 import { PrivacyWindow, ReadMeWindow, RulesWindow } from "@/components/windows/TextWindows";
 import { WalletWindow } from "@/components/windows/WalletWindow";
@@ -27,6 +28,7 @@ const WIDTHS: Partial<Record<WindowKind, number>> = {
   campaign: 720,
   escrow: 460,
   activity: 560,
+  orders: 560,
   rules: 620,
   organizer: 560,
   buyer: 480,
@@ -41,6 +43,7 @@ const LEFT_ICONS: { icon: IconName; kind: WindowKind }[] = [
   { icon: "groupbuys", kind: "groupbuys" },
   { icon: "new", kind: "new" },
   { icon: "wallet", kind: "wallet" },
+  { icon: "orders", kind: "orders" },
   { icon: "organizer", kind: "organizer" },
   { icon: "buyer", kind: "buyer" },
   { icon: "escrow", kind: "escrow" },
@@ -99,6 +102,10 @@ function useOpenIcon() {
   const { publicKey } = useWallet();
   const { setVisible } = useWalletModal();
   return (kind: WindowKind, opener: HTMLElement) => {
+    if (kind === "orders" && !publicKey) {
+      setVisible(true);
+      return;
+    }
     if (kind === "organizer" || kind === "buyer") {
       if (!publicKey) {
         setVisible(true);
@@ -125,6 +132,8 @@ function WindowContent({ win }: { win: OSWindow }) {
       return <EscrowMonitorWindow />;
     case "activity":
       return <ActivityWindow />;
+    case "orders":
+      return <OrdersWindow />;
     case "rules":
       return <RulesWindow />;
     case "privacy":

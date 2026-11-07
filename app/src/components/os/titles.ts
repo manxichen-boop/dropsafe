@@ -12,6 +12,7 @@ export const ICON_OF: Record<WindowKind, IconName> = {
   wallet: "wallet",
   escrow: "escrow",
   activity: "activity",
+  orders: "orders",
   rules: "rules",
   privacy: "privacy",
   campaign: "groupbuys",
@@ -34,6 +35,8 @@ export function titleFor(win: OSWindow, t: T, campaignTitles: Record<string, str
       return t.os.icons.escrow;
     case "activity":
       return t.os.icons.activity;
+    case "orders":
+      return t.os.icons.orders;
     case "rules":
       return t.os.icons.rules;
     case "privacy":

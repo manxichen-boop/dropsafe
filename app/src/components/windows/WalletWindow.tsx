@@ -152,6 +152,9 @@ export function WalletWindow() {
           </dl>
           <PendingSeats owner={publicKey} />
           <div className="mt-4 grid gap-3">
+            <button type="button" className="btn" onClick={() => open("orders")}>
+              {w.orders}
+            </button>
             <button type="button" className="btn" onClick={() => open("organizer", publicKey.toBase58())}>
               {w.organizer}
             </button>

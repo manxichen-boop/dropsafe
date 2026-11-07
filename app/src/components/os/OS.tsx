@@ -21,6 +21,7 @@ export type WindowKind =
   | "wallet"
   | "escrow"
   | "activity"
+  | "orders"
   | "rules"
   | "privacy"
   | "campaign"
@@ -101,6 +102,8 @@ function urlOf(win: OSWindow | undefined): string {
       return `/buyer/${win.param}`;
     case "new":
       return "/create";
+    case "orders":
+      return "/orders";
     case "privacy":
       return "/privacy";
     default:

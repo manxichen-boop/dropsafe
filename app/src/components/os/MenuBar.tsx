@@ -60,6 +60,7 @@ export function MenuBar() {
   const walletItems: Item[] = publicKey
     ? [
         { label: t.os.icons.wallet, run: () => open("wallet") },
+        { label: t.os.icons.orders, run: () => open("orders") },
         { label: t.wallet["copy-address"], run: () => void navigator.clipboard?.writeText(publicKey.toBase58()) },
         { label: t.wallet["change-wallet"], run: () => setVisible(true) },
         { label: t.wallet.disconnect, run: () => void disconnect() },

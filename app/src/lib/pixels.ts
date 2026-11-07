@@ -225,6 +225,7 @@ export type IconName =
   | "buyer"
   | "escrow"
   | "activity"
+  | "orders"
   | "rules"
   | "privacy";
 
@@ -278,6 +279,16 @@ export function drawIcon(name: IconName): Grid {
       p.rect(7, 3, 18, 26, PAPER);
       p.rect(21, 3, 4, 4, LINE);
       for (const y of [9, 13, 17, 21]) p.rect(10, y, y === 21 ? 7 : 12, 1, INK);
+      break;
+    case "orders":
+      // 像素购物袋
+      p.rect(5, 11, 22, 17, SUN);
+      p.rect(5, 11, 22, 3, SUN_DARK);
+      p.rect(10, 5, 2, 7, INK);
+      p.rect(20, 5, 2, 7, INK);
+      p.rect(10, 5, 12, 2, INK);
+      p.rect(10, 18, 12, 2, TOMATO);
+      p.rect(10, 22, 7, 2, TOMATO);
       break;
     case "wallet":
       p.rect(4, 9, 24, 17, TOMATO);
