@@ -1,28 +1,27 @@
 import type { Metadata } from "next";
-import { Fredoka, Inter, JetBrains_Mono } from "next/font/google";
+import { IBM_Plex_Mono, Pixelify_Sans } from "next/font/google";
 import "@solana/wallet-adapter-react-ui/styles.css";
 import "./globals.css";
-import { Footer } from "@/components/Footer";
-import { Header } from "@/components/Header";
+import { Desktop } from "@/components/os/Desktop";
+import { OSProvider } from "@/components/os/OS";
 import { Providers } from "@/components/Providers";
 
-const fredoka = Fredoka({ variable: "--font-fredoka", subsets: ["latin"] });
-const inter = Inter({ variable: "--font-inter", subsets: ["latin"] });
-const jetbrains = JetBrains_Mono({ variable: "--font-jetbrains", subsets: ["latin"] });
+const pixelify = Pixelify_Sans({ variable: "--font-pixelify", subsets: ["latin"], weight: ["400", "600", "700"] });
+const plex = IBM_Plex_Mono({ variable: "--font-plex", subsets: ["latin"], weight: ["400", "500", "600"] });
 
 export const metadata: Metadata = {
-  title: "DropSafe",
+  title: "DropSafe OS",
   description: "Group buys on Solana Devnet where buyers pay into an escrow account with no private key.",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
-    <html lang="en" className={`${fredoka.variable} ${inter.variable} ${jetbrains.variable}`}>
-      <body className="flex min-h-screen flex-col">
+    <html lang="en" className={`${pixelify.variable} ${plex.variable}`}>
+      <body>
         <Providers>
-          <Header />
-          <main className="mx-auto w-full max-w-6xl flex-1 px-4 py-8 md:py-12">{children}</main>
-          <Footer />
+          <OSProvider>
+            <Desktop>{children}</Desktop>
+          </OSProvider>
         </Providers>
       </body>
     </html>

@@ -1,9 +1,7 @@
 "use client";
 
-import { DocPage } from "@/components/DocPage";
-import { useI18n } from "@/lib/i18n";
+import { OpenOnLoad } from "@/components/os/OS";
 
 export default function PrivacyPage() {
-  const { t } = useI18n();
-  return <DocPage title={t.privacy.title} items={t.privacy.items} />;
+  return <OpenOnLoad kind="privacy" />;
 }
