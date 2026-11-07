@@ -1,0 +1,44 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #0c1110;
+  --color-surface: #141b19;
+  --color-line: #27322f;
+  --color-ink: #e9f0ed;
+  --color-muted: #94a39e;
+  --color-mint: #5fe3b8;
+  --color-amber: #f2b84b;
+  --color-rose: #f58b8b;
+  --font-sans: var(--font-geist-sans), "PingFang SC", "Noto Sans SC", system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
+}
+
+body {
+  background: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+}
+
+input {
+  color-scheme: dark;
+}
+
+.wallet-adapter-button {
+  height: 38px;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 1;
+  padding: 0 14px;
+}
+
+.wallet-adapter-button-trigger {
+  background: var(--color-mint);
+  color: #06241a;
+}
+
+.wallet-adapter-button:not([disabled]):hover {
+  background: #7cebc7;
+  color: #06241a;
+}

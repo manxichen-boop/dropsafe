@@ -21,3 +21,6 @@ id.json
 .DS_Store
 .vercel/
 *.log
+
+# 本地工具配置
+.claude/
