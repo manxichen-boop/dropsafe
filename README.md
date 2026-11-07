@@ -152,7 +152,7 @@ npm run dev
 
 Open http://localhost:3000. In Phantom, turn on Testnet Mode and select Solana Devnet. Get Devnet SOL at https://faucet.solana.com.
 
-The program ID and RPC URL live in [`app/src/lib/config.ts`](app/src/lib/config.ts). The app has an EN / 中文 switch in the navigation bar.
+The program ID and RPC URL live in [`app/src/lib/config.ts`](app/src/lib/config.ts). The app is a pixel desktop called DropSafe OS. Each feature opens in its own window, and the **View** menu switches between English and 中文.
 
 ### Build and test the program
 
