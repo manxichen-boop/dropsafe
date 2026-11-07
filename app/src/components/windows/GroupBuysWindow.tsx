@@ -126,8 +126,10 @@ export function GroupBuysWindow() {
                       <span>
                         {formatSol(account.price)} SOL {t.home.perPerson}
                       </span>
-                      <SeatBuddies campaign={address} target={account.targetCount} joined={account.joinedCount} buyers={buyers[address] ?? []} hop={false} label={t.home.joinedCount(account.joinedCount, account.targetCount)} />
                       <span>{next === null || next <= now ? t.ended : formatCountdown(next - now)}</span>
+                    </div>
+                    <div className="mt-1">
+                      <SeatBuddies campaign={address} target={account.targetCount} joined={account.joinedCount} buyers={buyers[address] ?? []} hop={false} label={t.home.joinedCount(account.joinedCount, account.targetCount)} />
                     </div>
                   </div>
                 </div>
