@@ -1,7 +1,7 @@
 {
   "license": "ISC",
   "scripts": {
-    "test": "anchor build -- --features devnet-demo && anchor test --validator legacy --skip-build",
+    "test": "cargo test -p dropsafe && cargo test -p dropsafe --features devnet-demo && anchor build -- --features devnet-demo && anchor test --validator legacy --skip-build",
     "lint:fix": "prettier */*.js \"*/**/*{.js,.ts}\" -w",
     "lint": "prettier */*.js \"*/**/*{.js,.ts}\" --check"
   },

@@ -29,9 +29,9 @@ pub const MAX_FUNDRAISING_SECONDS: i64 = 90 * DAY;
 /// 发货期最长 365 天
 pub const MAX_DELIVERY_SECONDS: i64 = 365 * DAY;
 
-/// 申诉期由合约固定,团长无法缩短。默认 72 小时
+/// 申诉期由合约固定,团长无法缩短。正式版 7 天
 #[cfg(not(feature = "devnet-demo"))]
-pub const APPEAL_WINDOW_SECONDS: i64 = 72 * 3_600;
+pub const APPEAL_WINDOW_SECONDS: i64 = 7 * DAY;
 /// devnet-demo 构建下只有 60 秒,方便录视频和跑测试
 #[cfg(feature = "devnet-demo")]
 pub const APPEAL_WINDOW_SECONDS: i64 = 60;

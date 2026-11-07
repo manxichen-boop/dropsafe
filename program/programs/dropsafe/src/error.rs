@@ -69,4 +69,7 @@ pub enum ErrorCode {
     WrongBuyer,
     #[msg("Arithmetic overflow")]
     MathOverflow,
+    /// 新错误放在最后,保持已有错误码的编号不变
+    #[msg("The organizer cannot join their own group buy")]
+    OrganizerCannotJoin,
 }

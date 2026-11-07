@@ -78,6 +78,17 @@ pub struct Campaign {
 }
 
 impl Campaign {
+    /// 申诉期的边界只在这里定义,所有指令共用,前端用同样的规则:
+    /// 报告从 delivery_deadline 这一秒开始(含),
+    /// 到 appeal_end 这一秒结束(不含)。正好等于 appeal_end 时不能再报告或确认,但可以结算
+    pub fn report_opened(&self, now: i64) -> bool {
+        now >= self.delivery_deadline
+    }
+
+    pub fn appeal_open(&self, now: i64) -> bool {
+        now < self.appeal_end
+    }
+
     /// 预付款 = price * 7 / 10
     pub fn upfront(&self) -> Result<u64> {
         upfront_of(self.price)
@@ -198,4 +209,70 @@ pub fn pay_from_escrow<'info>(
     escrow.sub_lamports(amount)?;
     to.add_lamports(amount)?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn campaign(delivery_deadline: i64, appeal_end: i64) -> Campaign {
+        Campaign {
+            organizer: Pubkey::default(),
+            campaign_id: 0,
+            title: String::new(),
+            description: String::new(),
+            image_url: String::new(),
+            price: 1_000,
+            target_count: 1,
+            joined_count: 1,
+            deadline: 0,
+            delivery_deadline,
+            appeal_end,
+            tier: Tier::Shielded,
+            status: CampaignStatus::Active,
+            upfront_released: true,
+            bond_total: 0,
+            bond_reclaimed: false,
+            seats_resolved: 0,
+            finalized: false,
+            bump: 0,
+        }
+    }
+
+    #[test]
+    fn appeal_window_length_is_fixed_per_build() {
+        #[cfg(not(feature = "devnet-demo"))]
+        assert_eq!(APPEAL_WINDOW_SECONDS, 7 * 86_400);
+        #[cfg(feature = "devnet-demo")]
+        assert_eq!(APPEAL_WINDOW_SECONDS, 60);
+    }
+
+    #[test]
+    fn report_opens_exactly_at_the_shipping_deadline() {
+        let c = campaign(1_000, 1_000 + APPEAL_WINDOW_SECONDS);
+        assert!(!c.report_opened(999));
+        assert!(c.report_opened(1_000));
+        assert!(c.report_opened(1_001));
+    }
+
+    #[test]
+    fn appeal_closes_exactly_at_appeal_end() {
+        let end = 1_000 + APPEAL_WINDOW_SECONDS;
+        let c = campaign(1_000, end);
+        // 截止前 1 秒:还能报告和确认,不能结算未回应的名额
+        assert!(c.appeal_open(end - 1));
+        // 正好等于截止时间:窗口已关闭,只能结算
+        assert!(!c.appeal_open(end));
+        // 截止后 1 秒:窗口已关闭
+        assert!(!c.appeal_open(end + 1));
+    }
+
+    #[test]
+    fn remainder_plus_upfront_is_the_price() {
+        for price in [1u64, 7, 10, 1_000_000_001, 10_000_000] {
+            let mut c = campaign(0, 0);
+            c.price = price;
+            assert_eq!(c.upfront().unwrap() + c.remainder().unwrap(), price);
+        }
+    }
 }

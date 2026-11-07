@@ -34,8 +34,8 @@ pub fn handle_report_not_received(ctx: Context<ReportNotReceived>) -> Result<()>
         ErrorCode::SeatAlreadyDecided
     );
     // 校验:发货期限之前不能报告,给团长留足发货时间
-    require!(now >= campaign.delivery_deadline, ErrorCode::TooEarlyToReport);
-    require!(now < campaign.appeal_end, ErrorCode::AppealWindowClosed);
+    require!(campaign.report_opened(now), ErrorCode::TooEarlyToReport);
+    require!(campaign.appeal_open(now), ErrorCode::AppealWindowClosed);
 
     ctx.accounts.contribution.status = ContributionStatus::Reported;
     Ok(())

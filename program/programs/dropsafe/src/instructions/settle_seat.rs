@@ -60,7 +60,7 @@ pub fn handle_settle_seat(ctx: Context<SettleSeat>) -> Result<()> {
     let pays_organizer = match seat {
         ContributionStatus::Confirmed => true,
         ContributionStatus::Paid => {
-            require!(now >= campaign.appeal_end, ErrorCode::SeatNotSettleable);
+            require!(!campaign.appeal_open(now), ErrorCode::SeatNotSettleable);
             true
         }
         ContributionStatus::Reported => false,

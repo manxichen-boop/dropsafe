@@ -53,6 +53,13 @@ pub fn handle_contribute(ctx: Context<Contribute>) -> Result<()> {
     let campaign = &ctx.accounts.campaign;
     let amount = campaign.price;
 
+    // 团长不能参加自己的团:否则可以用自己的钱凑满名额,伪造成团信号和信誉。
+    // 失败时整笔交易回滚,名额账户不会创建,也不会转账
+    require_keys_neq!(
+        ctx.accounts.buyer.key(),
+        campaign.organizer,
+        ErrorCode::OrganizerCannotJoin
+    );
     require!(
         campaign.status == CampaignStatus::Fundraising,
         ErrorCode::NotFundraising

@@ -31,7 +31,7 @@ pub fn handle_confirm_delivery(ctx: Context<ConfirmDelivery>) -> Result<()> {
         ErrorCode::SeatAlreadyDecided
     );
     require!(
-        Clock::get()?.unix_timestamp < ctx.accounts.campaign.appeal_end,
+        ctx.accounts.campaign.appeal_open(Clock::get()?.unix_timestamp),
         ErrorCode::AppealWindowClosed
     );
     ctx.accounts.contribution.status = ContributionStatus::Confirmed;

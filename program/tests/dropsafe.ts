@@ -432,6 +432,53 @@ describe("dropsafe v2", () => {
       await expectFail(() => finalize(campaign, b), "NotFinalizable");
       assert.equal(await escrowHeld(campaign), PRICE + UPFRONT * 2);
     });
+
+    for (const tier of ["shielded", "standard", "trust"] as TierName[]) {
+      it(`${tier}: the organizer cannot join their own group buy, and nothing changes`, async () => {
+        const [o, b] = await wallets(2);
+        const { campaign } = await create({ organizer: o, tier, target: 2 });
+        const before = {
+          organizer: await balance(o.publicKey),
+          escrow: await escrowHeld(campaign),
+          joined: (await program.account.campaign.fetch(campaign)).joinedCount,
+          created: (await organizerStats(o)).campaignsCreated.toNumber(),
+        };
+
+        await expectFail(() => contribute(campaign, o), "OrganizerCannotJoin");
+
+        // 交易整体回滚:没有名额账户、没有买家记录,人数、托管和团长余额都不变。
+        // 手续费由测试的 provider 钱包支付,所以团长余额应该一分不少
+        assert.isNull(await connection.getAccountInfo(contributionOf(campaign, o.publicKey)));
+        assert.isNull(await connection.getAccountInfo(buyerStatsOf(o.publicKey)));
+        const after = await program.account.campaign.fetch(campaign);
+        assert.equal(after.joinedCount, before.joined);
+        assert.equal(Object.keys(after.status)[0], "fundraising");
+        assert.equal(await escrowHeld(campaign), before.escrow);
+        assert.equal(await balance(o.publicKey), before.organizer);
+        assert.equal((await organizerStats(o)).campaignsCreated.toNumber(), before.created);
+
+        // 有真实买家加入后,团长仍然不能补上最后一个名额
+        await contribute(campaign, b);
+        await expectFail(() => contribute(campaign, o), "OrganizerCannotJoin");
+        assert.equal((await program.account.campaign.fetch(campaign)).joinedCount, 1);
+        assert.equal(await statusOf(campaign), "fundraising");
+
+        // 其他指令也绕不过去:团长没有名额账户,买家操作全部失败
+        await expectFail(() => withdraw(campaign, o), "AccountNotInitialized");
+        await expectFail(() => confirm(campaign, o), "AccountNotInitialized");
+        await expectFail(() => report(campaign, o), "AccountNotInitialized");
+        await cancel(campaign, o);
+        await expectFail(() => refund(campaign, o), "AccountNotInitialized");
+        // 拿真实买家的名额以团长身份退款:被拒绝,买家的名额和托管里的钱都还在
+        const held = await escrowHeld(campaign);
+        await expectFail(() => refund(campaign, o, b.publicKey), "AnchorError");
+        assert.isNotNull(await connection.getAccountInfo(contributionOf(campaign, b.publicKey)));
+        assert.equal(await escrowHeld(campaign), held);
+        await refund(campaign, b);
+        if (tier === "shielded") await reclaim(campaign, o);
+        assert.equal(await escrowHeld(campaign), 0);
+      });
+    }
   });
 
   describe("normal delivery", () => {
