@@ -1,0 +1,23 @@
+# 构建产物 / 依赖
+target/
+node_modules/
+.next/
+out/
+dist/
+.anchor/
+.yarn/
+test-ledger/
+*.tsbuildinfo
+next-env.d.ts
+
+# 环境变量
+.env*
+
+# 私钥与钱包文件:绝对不要提交
+*keypair*.json
+id.json
+
+# 系统与本地工具
+.DS_Store
+.vercel/
+*.log
