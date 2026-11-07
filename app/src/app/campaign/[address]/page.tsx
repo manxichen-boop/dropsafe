@@ -187,6 +187,11 @@ export default function CampaignPage({
       setSuccess({ title, signature });
       clearChainCache();
       await refresh();
+      // RPC 的列表查询比交易确认慢一点,刚确认时可能还是旧数据,稍后再读一次
+      setTimeout(() => {
+        clearChainCache();
+        refresh();
+      }, 4_000);
     } catch (e) {
       console.warn(e);
       setError(translateError(e));
@@ -404,7 +409,7 @@ export default function CampaignPage({
   const seatStatusLabel = (seat: Seat) =>
     "confirmed" in seat.account.status ? d.seatConfirmed : "reported" in seat.account.status ? d.seatReported : d.seatPaid;
   const canSettle = (seat: Seat) =>
-    "active" in campaign.status && (!("paid" in seat.account.status) || appealOver);
+    "active" in campaign.status && status !== "closed" && (!("paid" in seat.account.status) || appealOver);
   const settleLabel = (seat: Seat) => {
     const amount = settleAmount(campaign);
     if (amount.isZero()) return d.settleNoMoney;
