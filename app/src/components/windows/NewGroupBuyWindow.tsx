@@ -185,7 +185,7 @@ export function NewGroupBuyWindow({ win }: { win: OSWindow }) {
             <label key={option} className={`block cursor-pointer border-2 border-ink p-2 has-[:focus-visible]:outline-2 has-[:focus-visible]:outline-offset-2 has-[:focus-visible]:outline-tomato has-[:focus-visible]:outline-dashed ${tier === option ? "bg-line" : ""}`}>
               <span className="pixel-title flex items-center gap-2">
                 <input type="radio" name="tier" value={option} checked={tier === option} onChange={() => setTier(option)} className="accent-ink" />
-                <TierShield tier={option} size={24} />
+                <TierShield tier={option} size={16} />
                 {t.tier[option]}
               </span>
               <dl className="mt-2 space-y-1 text-[13px]">

@@ -54,7 +54,7 @@ export function RulesWindow() {
                   <td key={j} className="border-2 border-ink p-2">
                     {j === 0 ? (
                       <span className="flex items-center gap-2 font-semibold">
-                        <TierShield tier={TIERS[i]} size={24} />
+                        <TierShield tier={TIERS[i]} size={16} />
                         {cell}
                       </span>
                     ) : (

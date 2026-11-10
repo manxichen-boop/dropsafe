@@ -47,7 +47,8 @@ export function Pixel({
       width={size}
       height={size}
       shapeRendering="crispEdges"
-      className={className}
+      // 不参与 flex 压缩,否则放大倍数不再是整数
+      className={`shrink-0 ${className ?? ""}`}
       role={label ? "img" : undefined}
       aria-label={label}
       aria-hidden={label ? undefined : true}

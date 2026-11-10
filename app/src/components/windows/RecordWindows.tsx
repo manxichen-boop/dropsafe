@@ -91,7 +91,7 @@ export function OrganizerWindow({ address }: { address: string }) {
           {TIERS.map((tier) => (
             <section key={tier} className="border-b-2 border-ink py-3">
               <h3 className="pixel-title flex items-center gap-2 text-base">
-                <TierShield tier={tier} size={24} />
+                <TierShield tier={tier} size={32} />
                 {t.tier[tier]}
               </h3>
               <dl className="mt-1">

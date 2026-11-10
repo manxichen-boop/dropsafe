@@ -180,7 +180,7 @@ export function GroupBuysWindow() {
             const address = publicKey.toBase58();
             return (
               <div key={address} role="button" tabIndex={0} {...handlers(address)} className="flex cursor-default flex-col items-center gap-1 p-2 text-center hover:bg-line focus:bg-line">
-                <DitheredImage url={account.imageUrl} alt={account.title} width={64} placeholderSize={48} className="h-16 w-16" />
+                <DitheredImage url={account.imageUrl} alt={account.title} width={64} placeholderSize={64} className="h-16 w-16" />
                 <span className="flex items-center gap-1 text-[13px] font-semibold">
                   <TierShield tier={tierOf(account)} size={16} />
                   {formatSol(account.price)} SOL

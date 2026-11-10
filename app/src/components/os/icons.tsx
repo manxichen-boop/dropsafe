@@ -10,7 +10,7 @@ export function DesktopIcon({ name, size = 48 }: { name: IconName; size?: number
 
 const TIER_COLOR: Record<TierName, string> = { shielded: SAFE, standard: SUN, trust: GRAY };
 
-export function TierShield({ tier, size = 24 }: { tier: TierName; size?: number }) {
+export function TierShield({ tier, size = 16 }: { tier: TierName; size?: number }) {
   const grid = useMemo(() => drawShield(TIER_COLOR[tier]), [tier]);
   return <Pixel grid={grid} size={size} />;
 }

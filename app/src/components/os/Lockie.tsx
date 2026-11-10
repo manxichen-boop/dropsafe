@@ -15,11 +15,11 @@ const MOOD_LABEL: Record<LockieMood, string> = {
 
 // 两帧逐帧动画:用 steps 切换显示,尊重 prefers-reduced-motion
 export function Lockie({ mood = "guarding", size = 64, decorative = false, className }: { mood?: LockieMood; size?: number; decorative?: boolean; className?: string }) {
-  const n = size >= 64 ? 64 : 32;
-  const frames = useMemo(() => [drawLockie(mood, n, 0), drawLockie(mood, n, 1)], [mood, n]);
+  // 始终是 32 格,按整数倍放大(32 / 64 / 96),像素大小才一致
+  const frames = useMemo(() => [drawLockie(mood, 0), drawLockie(mood, 1)], [mood]);
   return (
     <svg
-      viewBox={`0 0 ${n} ${n}`}
+      viewBox="0 0 32 32"
       width={size}
       height={size}
       shapeRendering="crispEdges"

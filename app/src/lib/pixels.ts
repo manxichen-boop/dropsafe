@@ -58,117 +58,201 @@ export function outline(grid: Grid, c = INK): Grid {
 
 export type LockieMood = "guarding" | "waiting" | "celebrating" | "paying" | "refunding" | "sleeping";
 
-function coin(p: ReturnType<typeof painter>, cx: number, cy: number, r: number) {
-  p.ell(cx, cy, r, r, SUN_DARK);
-  p.ell(cx - 0.3, cy - 0.3, r - 0.8, r - 0.8, SUN);
+const SUN_LIGHT = "#FFE08A";
+const TOMATO_DEEP = "#B8431F";
+
+// 逐行的半宽:蛋形身体,上窄下宽。手写的宽度序列,边缘是干净的像素曲线
+const BODY_TOP = 7;
+const BODY_HALF = [3, 6, 7, 8, 9, 10, 10, 11, 11, 11, 12, 12, 12, 12, 12, 12, 12, 12, 11, 11, 10, 8];
+const inBody = (x: number, y: number, dy: number) => {
+  const half = BODY_HALF[y - BODY_TOP - dy];
+  return half !== undefined && x >= 16 - half && x < 16 + half;
+};
+
+// 圆形硬币,逐行半宽。外圈深色,内圈留一道高光
+const COIN_LG = [3, 5, 6, 7, 7, 7, 7, 7, 7, 6, 5, 3];
+const COIN_SM = [2, 3, 3, 3, 3, 2];
+
+function setPx(grid: Grid, x: number, y: number, c: string | null) {
+  if (y >= 0 && y < grid.length && x >= 0 && x < grid.length) grid[y][x] = c;
+}
+function fill(grid: Grid, x: number, y: number, w: number, h: number, c: string) {
+  for (let yy = y; yy < y + h; yy++) for (let xx = x; xx < x + w; xx++) setPx(grid, xx, yy, c);
 }
 
-// 画一帧 Lockie。frame 0 和 1 组成两帧逐帧动画
-export function drawLockie(mood: LockieMood, n: 32 | 64, frame: 0 | 1): Grid {
-  const grid = makeGrid(n);
-  const p = painter(grid);
-  const hop = mood === "celebrating" && frame === 1 ? -2 : 0;
-  const by = 18 + hop;
+function drawCoin(grid: Grid, rows: number[], cx: number, top: number) {
+  rows.forEach((half, i) => {
+    for (let x = cx - half; x < cx + half; x++) setPx(grid, x, top + i, SUN_DARK);
+    const prev = rows[i - 1] ?? 0;
+    const next = rows[i + 1] ?? 0;
+    const inner = Math.min(half, prev, next) - 1;
+    for (let x = cx - inner; x < cx + inner; x++) setPx(grid, x, top + i, SUN);
+  });
+  if (rows.length > 6) {
+    fill(grid, cx - 3, top + 2, 3, 1, SUN_LIGHT);
+    fill(grid, cx - 4, top + 3, 1, 2, SUN_LIGHT);
+  } else {
+    setPx(grid, cx - 1, top + 2, SUN_LIGHT);
+  }
+}
 
-  // 脚和手臂先画,身体盖在上面
-  p.rect(9, 26 + hop, 5, 3, TOMATO_DARK);
-  p.rect(18, 26 + hop, 5, 3, TOMATO_DARK);
-  if (mood === "celebrating") {
-    p.rect(3, 10 + hop, 3, 7, TOMATO_DARK);
-    p.rect(26, 10 + hop, 3, 7, TOMATO_DARK);
-  } else if (mood === "paying") {
-    p.rect(3, 16, 3, 6, TOMATO_DARK);
-    p.rect(26, 15, 3, 3, TOMATO_DARK);
-  } else if (mood === "refunding") {
-    p.rect(26, 16, 3, 6, TOMATO_DARK);
-    p.rect(3, 15, 3, 3, TOMATO_DARK);
-  } else if (mood !== "guarding") {
-    p.rect(3, 16, 3, 6, TOMATO_DARK);
-    p.rect(26, 16, 3, 6, TOMATO_DARK);
+// 短胳膊:圆头小块。压在身体上的边用深色收边,伸出身体的边交给外描边
+function drawArm(grid: Grid, x: number, y: number, w: number, h: number) {
+  const inside = (xx: number, yy: number) => {
+    const cornerX = xx === x || xx === x + w - 1;
+    const cornerY = yy === y || yy === y + h - 1;
+    return xx >= x && xx < x + w && yy >= y && yy < y + h && !(cornerX && cornerY);
+  };
+  const before = grid.map((row) => [...row]);
+  for (let yy = y; yy < y + h; yy++)
+    for (let xx = x; xx < x + w; xx++) {
+      if (!inside(xx, yy)) continue;
+      const edge = !inside(xx - 1, yy) || !inside(xx + 1, yy) || !inside(xx, yy - 1) || !inside(xx, yy + 1);
+      const shaded = yy >= y + h - 2 && !edge;
+      setPx(grid, xx, yy, edge && before[yy]?.[xx] ? TOMATO_DEEP : shaded ? TOMATO_DARK : TOMATO);
+    }
+}
+
+type Eye = "open" | "up" | "right" | "left" | "shut" | "happy" | "sad";
+
+// 眼睛 4x5,切掉四角成椭圆,右上角一颗高光,和定稿形象一致
+function drawEye(grid: Grid, x: number, y: number, kind: Eye, flip: boolean) {
+  if (kind === "shut") {
+    // 闭眼:向下弯的弧线
+    fill(grid, x + 1, y + 3, 2, 1, INK);
+    setPx(grid, x, y + 2, INK);
+    setPx(grid, x + 3, y + 2, INK);
+    return;
+  }
+  if (kind === "happy") {
+    // 开心:向上弯的弧线
+    fill(grid, x + 1, y + 1, 2, 1, INK);
+    setPx(grid, x, y + 2, INK);
+    setPx(grid, x + 3, y + 2, INK);
+    return;
+  }
+  fill(grid, x + 1, y, 2, 5, INK);
+  fill(grid, x, y + 1, 4, 3, INK);
+  const shift = kind === "right" ? 1 : kind === "left" ? -1 : 0;
+  const hy = kind === "up" ? y : y + 1;
+  setPx(grid, x + 2 + shift, hy, PAPER);
+  setPx(grid, x + 2 + shift, hy + 1, PAPER);
+  if (kind === "sad") {
+    // 八字眉:内侧高、外侧低,用深橙色,不抢眼睛
+    const dx = flip ? [0, 1, 2, 3] : [3, 2, 1, 0];
+    setPx(grid, x + dx[0], y - 3, TOMATO_DEEP);
+    setPx(grid, x + dx[1], y - 3, TOMATO_DEEP);
+    setPx(grid, x + dx[2], y - 2, TOMATO_DEEP);
+    setPx(grid, x + dx[3], y - 2, TOMATO_DEEP);
+  }
+}
+
+// 画一帧 Lockie:32x32 手工定位,按整数倍放大。frame 0 和 1 组成两帧逐帧动画
+export function drawLockie(mood: LockieMood, frame: 0 | 1): Grid {
+  const grid = makeGrid(32);
+  const dy = mood === "celebrating" && frame === 1 ? -2 : 0;
+
+  // 脚:两只小椭圆,先画,身体压在上面
+  for (const x of [7, 19]) {
+    fill(grid, x, 28 + dy, 6, 1, TOMATO_DARK);
+    fill(grid, x, 29 + dy, 6, 1, TOMATO_DARK);
+    fill(grid, x + 1, 30 + dy, 4, 1, TOMATO_DEEP);
   }
 
-  // 身体:同色系明暗做体积
-  p.ell(16, by, 11.5, 10.5, TOMATO);
-  p.shade(TOMATO, (_, y) => y > by + 7, TOMATO_DARK);
-  p.ell(11, by - 7, 3.2, 1.6, TOMATO_LIGHT);
-
-  // 肚子和投币口
-  p.ell(16, by + 4, 7, 4.4, TOMATO_LIGHT);
-  p.rect(12, by + 2.5, 8, 2, INK);
-
-  const eyeY = by - 6;
-  const openEyes = (lookX = 0, lookY = 0) => {
-    for (const x of [10, 19]) {
-      p.rect(x, eyeY, 4, 5, PAPER);
-      p.rect(x + 1 + lookX, eyeY + 1 + lookY, 2, 3, INK);
+  // 身体和体积:右下暗面,左上亮面
+  for (let y = BODY_TOP + dy; y < BODY_TOP + dy + BODY_HALF.length; y++)
+    for (let x = 0; x < 32; x++) {
+      if (!inBody(x, y, dy)) continue;
+      let c = TOMATO;
+      if (!inBody(x + 2, y + 2, dy) || !inBody(x + 1, y + 3, dy)) c = TOMATO_DARK;
+      setPx(grid, x, y, c);
     }
+  fill(grid, 12, 9 + dy, 3, 1, TOMATO_LIGHT);
+  fill(grid, 10, 10 + dy, 3, 1, TOMATO_LIGHT);
+  fill(grid, 9, 11 + dy, 2, 1, TOMATO_LIGHT);
+
+  // 脸:眼睛分得很开,嘴在两眼之间
+  const eyeY = 13 + dy;
+  const [ex1, ex2] = [8, 20];
+  const eye = (kind: Eye) => {
+    drawEye(grid, ex1, eyeY, kind, false);
+    drawEye(grid, ex2, eyeY, kind, true);
   };
-  const closedEyes = () => {
-    for (const x of [10, 19]) p.rect(x, eyeY + 2, 4, 1, INK);
-  };
-  const mouthSmile = () => {
-    p.rect(14, by - 0.5, 1, 1, INK);
-    p.rect(17, by - 0.5, 1, 1, INK);
-    p.rect(15, by + 0.5, 2, 1, INK);
+  const smile = () => {
+    setPx(grid, 13, eyeY + 2, INK);
+    fill(grid, 14, eyeY + 3, 4, 1, INK);
+    setPx(grid, 18, eyeY + 2, INK);
   };
 
   switch (mood) {
-    case "guarding":
-      frame === 1 ? closedEyes() : openEyes();
-      mouthSmile();
-      coin(p, 16, by + 7, 3.6);
-      p.rect(7, by + 4, 5, 3, TOMATO_DARK);
-      p.rect(20, by + 4, 5, 3, TOMATO_DARK);
+    case "guarding": {
+      eye(frame === 1 ? "shut" : "open");
+      smile();
+      drawCoin(grid, COIN_LG, 16, 18);
+      drawArm(grid, 3, 21, 6, 6);
+      drawArm(grid, 23, 21, 6, 6);
       break;
-    case "waiting":
-      openEyes(0, -1);
-      p.rect(15, by - 0.5, 2, 2, INK);
-      coin(p, 16, frame === 1 ? 4 : 3.2, 2.6);
+    }
+    case "waiting": {
+      eye("up");
+      fill(grid, 15, eyeY + 2, 2, 2, INK);
+      drawCoin(grid, COIN_SM, 16, frame === 1 ? 1 : 0);
+      drawArm(grid, 2, 20, 5, 6);
+      drawArm(grid, 25, 20, 5, 6);
       break;
-    case "celebrating":
-      for (const x of [10, 19]) {
-        p.rect(x, eyeY + 1, 1, 1, INK);
-        p.rect(x + 1, eyeY, 2, 1, INK);
-        p.rect(x + 3, eyeY + 1, 1, 1, INK);
-      }
-      p.rect(14, by - 1, 4, 2, INK);
-      p.rect(15, by, 2, 1, TOMATO_LIGHT);
-      coin(p, 5, frame === 1 ? 5 : 7, 2.2);
-      coin(p, 27, frame === 1 ? 7 : 5, 2.2);
+    }
+    case "celebrating": {
+      eye("happy");
+      // 张大的笑嘴和舌头
+      fill(grid, 13, eyeY + 2, 6, 1, INK);
+      fill(grid, 14, eyeY + 3, 4, 2, INK);
+      fill(grid, 15, eyeY + 4, 2, 1, TOMATO_LIGHT);
+      drawArm(grid, 2, 12 + dy, 5, 7);
+      drawArm(grid, 25, 12 + dy, 5, 7);
+      drawCoin(grid, COIN_SM, 5, frame === 1 ? 2 : 4);
+      drawCoin(grid, COIN_SM, 27, frame === 1 ? 4 : 2);
       break;
-    case "paying":
-      openEyes(1, 0);
-      mouthSmile();
-      coin(p, frame === 1 ? 29 : 28.4, 13, 2.8);
+    }
+    case "paying": {
+      eye("right");
+      smile();
+      drawArm(grid, 2, 20, 5, 6);
+      drawArm(grid, 21, 20, 8, 5);
+      drawCoin(grid, COIN_SM, frame === 1 ? 28 : 27, 15);
       break;
-    case "refunding":
-      openEyes(0, 1);
-      p.rect(10, eyeY - 2, 3, 1, INK);
-      p.rect(9, eyeY - 1, 1, 1, INK);
-      p.rect(19, eyeY - 2, 3, 1, INK);
-      p.rect(22, eyeY - 1, 1, 1, INK);
-      p.rect(15, by, 2, 1, INK);
-      p.rect(14, by + 1, 1, 1, INK);
-      p.rect(17, by + 1, 1, 1, INK);
-      p.rect(9, eyeY + (frame === 1 ? 7 : 5), 1, 2, PAPER);
-      coin(p, frame === 1 ? 3 : 3.6, 13, 2.8);
+    }
+    case "refunding": {
+      eye("sad");
+      // 向下的嘴
+      fill(grid, 14, eyeY + 2, 4, 1, INK);
+      setPx(grid, 13, eyeY + 3, INK);
+      setPx(grid, 18, eyeY + 3, INK);
+      // 眼泪
+      fill(grid, 9, eyeY + (frame === 1 ? 6 : 5), 1, 2, PAPER);
+      drawArm(grid, 25, 20, 5, 6);
+      drawArm(grid, 3, 20, 8, 5);
+      drawCoin(grid, COIN_SM, frame === 1 ? 4 : 5, 15);
       break;
-    case "sleeping":
-      closedEyes();
-      p.rect(15, by, 2, 1, INK);
+    }
+    case "sleeping": {
+      eye("shut");
+      fill(grid, 15, eyeY + 3, 2, 1, INK);
+      drawArm(grid, 2, 20, 5, 6);
+      drawArm(grid, 25, 20, 5, 6);
       break;
+    }
   }
+
   const done = outline(grid);
   if (mood === "sleeping") {
-    // 像素 z,放在描边之后,不被描边
+    // 像素 z 放在描边之后,不被描边
     const z = (x: number, y: number) => {
-      const q = painter(done);
-      q.rect(x, y, 3, 1, INK);
-      q.rect(x + 1, y + 1, 1, 1, INK);
-      q.rect(x, y + 2, 3, 1, INK);
+      fill(done, x, y, 3, 1, INK);
+      setPx(done, x + 1, y + 1, INK);
+      fill(done, x, y + 2, 3, 1, INK);
     };
-    z(frame === 1 ? 25 : 24, 2);
-    if (frame === 1) z(21, 5);
+    z(frame === 1 ? 27 : 26, 1);
+    if (frame === 1) z(23, 4);
   }
   return done;
 }
@@ -229,112 +313,220 @@ export type IconName =
   | "rules"
   | "privacy";
 
-function star(p: ReturnType<typeof painter>, x: number, y: number, c: string) {
-  p.rect(x + 2, y, 2, 6, c);
-  p.rect(x, y + 2, 6, 2, c);
-  p.rect(x + 1, y + 1, 4, 4, c);
+// 图标全部是 16x16 手工点阵,在 16、32、48、64 像素下都是整数倍放大
+const SPRITE: Record<string, string | null> = {
+  ".": null,
+  K: INK,
+  W: PAPER,
+  T: TOMATO,
+  D: TOMATO_DARK,
+  L: TOMATO_LIGHT,
+  Y: SUN,
+  O: SUN_DARK,
+  G: SAFE,
+  l: LINE,
+};
+const spriteGrid = (rows: string[], extra: Record<string, string> = {}): Grid =>
+  rows.map((row) => [...row].map((ch) => extra[ch] ?? SPRITE[ch] ?? null));
+
+const SHIELD_ROWS = [
+  "................",
+  "..KKKKKKKKKKKK..",
+  ".KCCCCCCCCCCCCK.",
+  ".KWCCCCCCCCCCDK.",
+  ".KCCCCCCCCCKCDK.",
+  ".KCCCCCCCCKKCDK.",
+  ".KCCKCCCCKKCCDK.",
+  ".KCCKKCCKKCCCDK.",
+  "..KCCKKKKCCCDK..",
+  "..KCCCKKCCCCDK..",
+  "...KCCCCCCCDK...",
+  "....KCCCCCDK....",
+  ".....KCCCDK.....",
+  "......KCDK......",
+  ".......KK.......",
+  "................",
+];
+const SHIELD_SHADE: Record<string, string> = { [TOMATO]: TOMATO_DARK, [SAFE]: "#1F8F59", [SUN]: SUN_DARK, [GRAY]: "#6B665E" };
+
+export function drawShield(color: string): Grid {
+  return spriteGrid(SHIELD_ROWS, { C: color, D: SHIELD_SHADE[color] ?? color });
 }
 
-export function drawShield(color: string, n: 16 | 32 = 32): Grid {
-  const grid = makeGrid(n);
-  const p = painter(grid);
-  p.rect(6, 4, 20, 14, color);
-  p.rect(7, 18, 18, 3, color);
-  p.rect(9, 21, 14, 3, color);
-  p.rect(12, 24, 8, 2, color);
-  p.rect(14, 26, 4, 2, color);
-  p.rect(8, 6, 3, 3, PAPER);
-  // 对勾
-  p.rect(11, 14, 2, 2, INK);
-  p.rect(13, 16, 2, 2, INK);
-  p.rect(15, 14, 2, 2, INK);
-  p.rect(17, 12, 2, 2, INK);
-  p.rect(19, 10, 2, 2, INK);
-  return outline(grid);
-}
+const LOCKIE_ICON = [
+  "................",
+  "................",
+  ".....KKKKKK.....",
+  "....KLLTTTTK....",
+  "...KLTTTTTTTK...",
+  "..KTTTTTTTTTDK..",
+  "..KTKWTTTTKWDK..",
+  "..KTKKTTTTKKDK..",
+  "..KTTTTKKTTTDK..",
+  "..KTTTYYYYTTDK..",
+  "..KTTYYYYYYTDK..",
+  "..KDTYYYYYYDDK..",
+  "...KDDYYYYDDK...",
+  "....KKKKKKKK....",
+  "....KDK..KDK....",
+  "....KKK..KKK....",
+];
+
+const ICONS: Record<Exclude<IconName, "rules">, string[]> = {
+  readme: [
+    "................",
+    "...KKKKKKKK.....",
+    "...KWWWWWWKK....",
+    "...KWWWWWWKlK...",
+    "...KWWWWWWKKKK..",
+    "...KWWWWWWWWWK..",
+    "...KWKKKKKKKWK..",
+    "...KWWWWWWWWWK..",
+    "...KWKKKKKKKWK..",
+    "...KWWWWWWWWWK..",
+    "...KWKKKKKKKWK..",
+    "...KWWWWWWWWWK..",
+    "...KWKKKKWWWWK..",
+    "...KWWWWWWWWWK..",
+    "...KKKKKKKKKKK..",
+    "................",
+  ],
+  groupbuys: LOCKIE_ICON.map((row, y) => (y === 0 ? "..KK...KK...KK.." : y === 1 ? ".KYOK.KYOK.KYOK." : row)),
+  new: LOCKIE_ICON.map((row, y) => {
+    const badge = ["..KKKKK", "..KGGGK", "KKKGKGK".replace("KKKGKGK", "..KGKGK"), "..KGGGK", "..KKKKK"][y];
+    return badge ? row.slice(0, 9) + badge : row;
+  }),
+  wallet: [
+    "................",
+    "................",
+    "..KKKKKKKKKKK...",
+    ".KLLLLLLLLLLLK..",
+    ".KTTTTTTTTTTTK..",
+    ".KTTTTTTTTTKKKK.",
+    ".KTTTTTTTTKDDDDK",
+    ".KTTTTTTTTKDYDDK",
+    ".KTTTTTTTTKDDDDK",
+    ".KTTTTTTTTTKKKK.",
+    ".KTTTTTTTTTTTK..",
+    ".KDDDDDDDDDDDK..",
+    "..KKKKKKKKKKK...",
+    "................",
+    "................",
+    "................",
+  ],
+  orders: [
+    "................",
+    "......KKKK......",
+    ".....K....K.....",
+    ".....K....K.....",
+    "..KKKKKKKKKKKK..",
+    "..KOOOOOOOOOOK..",
+    "..KYYKYYYYKYYK..",
+    "..KYYYYYYYYYYK..",
+    "..KYYYYYYYYYYK..",
+    "..KYYTTTTTTYYK..",
+    "..KYYYYYYYYYYK..",
+    "..KYYTTTYYYYYK..",
+    "..KYYYYYYYYYYK..",
+    "..KOOOOOOOOOOK..",
+    "..KKKKKKKKKKKK..",
+    "................",
+  ],
+  organizer: [
+    "................",
+    "................",
+    "................",
+    ".KKKKKKKKKKKKKK.",
+    ".KWWWWWWWWWWWWK.",
+    ".KWWTTWWWWWWWWK.",
+    ".KWTTTTWKKKKKWK.",
+    ".KWTTTTWWWWWWWK.",
+    ".KWWTTWWKKKKWWK.",
+    ".KWTTTTWWWWWWWK.",
+    ".KWTTTTWKKKWWWK.",
+    ".KWWWWWWWWWWWWK.",
+    ".KKKKKKKKKKKKKK.",
+    "................",
+    "................",
+    "................",
+  ],
+  buyer: [
+    "................",
+    "...KKKKKKKKKK...",
+    "...KWWWWWWWWK...",
+    "...KWKKKKKKWK...",
+    "...KWWWWWWWWK...",
+    "...KWKKKKKKWK...",
+    "...KWWWWWWWWK...",
+    "...KWKKKKKKWK...",
+    "...KWWWWWWWWK...",
+    "...KWTTTWKKWK...",
+    "...KWWWWWWWWK...",
+    "...KWWWWWWWWK...",
+    "...KKWKKWKKWK...",
+    "....K..K..K.....",
+    "................",
+    "................",
+  ],
+  escrow: [
+    "................",
+    "................",
+    "...KKKK.....KKK.",
+    "..KK..KK....KGK.",
+    "..K....K....KGK.",
+    "..K....K.KKKKGK.",
+    ".KKKKKKKKKTKKGK.",
+    ".KYYYYYYKKTKKGK.",
+    ".KYYKKYYKKTKKGK.",
+    ".KYYKKYYKKTKKGK.",
+    ".KYYYYYYKKTKKGK.",
+    ".KOOOOOOKKTKKGK.",
+    ".KKKKKKKKKKKKKK.",
+    "................",
+    "................",
+    "................",
+  ],
+  activity: [
+    "................",
+    ".....KKKKKK.....",
+    "..KKKKllllKKKK..",
+    "..KWWKKKKKKWWK..",
+    "..KWWWWWWWWWWK..",
+    "..KWGWKKKKKKWK..",
+    "..KWWWWWWWWWWK..",
+    "..KWTWKKKKKKWK..",
+    "..KWWWWWWWWWWK..",
+    "..KWGWKKKKKKWK..",
+    "..KWWWWWWWWWWK..",
+    "..KWGWKKKKWWWK..",
+    "..KWWWWWWWWWWK..",
+    "..KKKKKKKKKKKK..",
+    "................",
+    "................",
+  ],
+  privacy: [
+    "................",
+    "................",
+    ".KKKKK..........",
+    "KOOOOOKKKKKKKKK.",
+    "KOOOOOOOOOOOOOOK",
+    "KYYYYYYYYYYYYYYK",
+    "KYYYYYYYYYYYYYYK",
+    "KYYYYYYYYYYYYYYK",
+    "KYYYYYYYYYYYYYYK",
+    "KYYYYYYYYYYYYYYK",
+    "KYYYYYYYYYYYYYYK",
+    "KYYYYYYYYYYYYYYK",
+    "KOOOOOOOOOOOOOOK",
+    "KKKKKKKKKKKKKKKK",
+    "................",
+    "................",
+  ],
+};
 
 export function drawIcon(name: IconName): Grid {
   if (name === "rules") return drawShield(TOMATO);
-  if (name === "groupbuys" || name === "new") {
-    const grid = makeGrid(32);
-    const body = drawLockie("guarding", 32, 0);
-    for (let y = 4; y < 32; y++) for (let x = 0; x < 32; x++) grid[y][x] = body[y - 2]?.[x] ?? null;
-    const p = painter(grid);
-    if (name === "new") {
-      p.rect(21, 0, 11, 11, INK);
-      p.rect(22, 1, 9, 9, SAFE);
-      p.rect(25, 3, 3, 5, INK);
-      p.rect(24, 4, 5, 3, INK);
-    } else {
-      coin(p, 8, 4, 2.6);
-      coin(p, 16, 3, 2.6);
-      coin(p, 24, 4, 2.6);
-    }
-    return grid;
-  }
-  const grid = makeGrid(32);
-  const p = painter(grid);
-  switch (name) {
-    case "readme":
-      p.rect(7, 3, 18, 26, PAPER);
-      p.rect(21, 3, 4, 4, LINE);
-      for (const y of [9, 13, 17, 21]) p.rect(10, y, y === 21 ? 7 : 12, 1, INK);
-      break;
-    case "orders":
-      // 像素购物袋
-      p.rect(5, 11, 22, 17, SUN);
-      p.rect(5, 11, 22, 3, SUN_DARK);
-      p.rect(10, 5, 2, 7, INK);
-      p.rect(20, 5, 2, 7, INK);
-      p.rect(10, 5, 12, 2, INK);
-      p.rect(10, 18, 12, 2, TOMATO);
-      p.rect(10, 22, 7, 2, TOMATO);
-      break;
-    case "wallet":
-      p.rect(4, 9, 24, 17, TOMATO);
-      p.rect(4, 9, 24, 3, TOMATO_LIGHT);
-      p.rect(19, 15, 9, 6, TOMATO_DARK);
-      p.rect(21, 17, 2, 2, SUN);
-      break;
-    case "organizer":
-      p.rect(3, 8, 26, 17, PAPER);
-      star(p, 6, 12, TOMATO);
-      for (const y of [12, 16, 20]) p.rect(15, y, 11, 1, INK);
-      p.rect(6, 20, 6, 1, INK);
-      break;
-    case "buyer":
-      p.rect(8, 3, 16, 24, PAPER);
-      for (let x = 8; x < 24; x += 4) p.rect(x, 27, 2, 2, PAPER);
-      for (const y of [7, 11, 15]) p.rect(11, y, 10, 1, INK);
-      p.rect(11, 20, 5, 2, TOMATO);
-      p.rect(18, 20, 3, 2, INK);
-      break;
-    case "escrow":
-      p.rect(5, 17, 14, 11, SUN);
-      p.rect(8, 11, 2, 6, INK);
-      p.rect(14, 11, 2, 6, INK);
-      p.rect(8, 9, 8, 2, INK);
-      p.rect(11, 21, 2, 4, INK);
-      p.rect(21, 20, 2, 8, SAFE);
-      p.rect(24, 14, 2, 14, TOMATO);
-      p.rect(27, 8, 2, 20, SAFE);
-      break;
-    case "activity":
-      p.rect(9, 4, 16, 24, PAPER);
-      p.rect(6, 4, 3, 5, LINE);
-      p.rect(25, 23, 3, 5, LINE);
-      for (const y of [9, 13, 17, 21]) {
-        p.rect(12, y, 2, 2, y === 13 ? TOMATO : SAFE);
-        p.rect(15, y, 7, 1, INK);
-      }
-      break;
-    case "privacy":
-      p.rect(3, 9, 26, 18, SUN);
-      p.rect(3, 6, 11, 4, SUN);
-      p.rect(3, 12, 26, 1, SUN_DARK);
-      break;
-  }
-  return outline(grid);
+  return spriteGrid(ICONS[name]);
 }
 
 // 外框平铺用的小图案:硬币、锁、星点。返回 SVG 字符串
